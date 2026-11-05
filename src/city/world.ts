@@ -298,6 +298,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const buildingGeos: THREE.BufferGeometry[][] = [[], [], [], []];
   const sidewalkGeos: THREE.BufferGeometry[] = [];
   const kerbGeos: THREE.BufferGeometry[] = [];
+  const hedgeGeos: THREE.BufferGeometry[] = [];
   const roofGeos: THREE.BufferGeometry[] = [];
   const leafTex = palmLeafTexture();
   const palmTrunks: THREE.Matrix4[] = [];
@@ -338,10 +339,17 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         solids.push({ minX: cx - 7, maxX: cx + 7, minZ: cz - 7, maxZ: cz + 7 });
         continue;
       }
+      // The block interior (between buildings) is fenced off with a hedge so cars stay on the streets.
+      const inner = BLOCK / 2 - 2;
+      solids.push({ minX: cx - inner - 1, maxX: cx + inner + 1, minZ: cz - inner - 1, maxZ: cz + inner + 1 });
+      for (const [hx, hz, hw, hd] of [[cx, cz - inner - 1, inner * 2 + 2, 0.8], [cx, cz + inner + 1, inner * 2 + 2, 0.8], [cx - inner - 1, cz, 0.8, inner * 2 + 2], [cx + inner + 1, cz, 0.8, inner * 2 + 2]] as const) {
+        const hedge = new THREE.BoxGeometry(hw, 0.9, hd);
+        hedge.translate(hx, 0.75, hz);
+        hedgeGeos.push(hedge);
+      }
       // Subdivide the block into 2-4 lots.
       const lots: { x: number; z: number; w: number; d: number }[] = [];
       const split = rng.next();
-      const inner = BLOCK / 2 - 2;
       if (split < 0.3) lots.push({ x: cx, z: cz, w: inner * 2, d: inner * 2 });
       else if (split < 0.6) {
         lots.push({ x: cx - inner / 2, z: cz, w: inner, d: inner * 2 });
@@ -463,6 +471,10 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   sidewalks.castShadow = true;
   group.add(sidewalks);
   group.add(new THREE.Mesh(mergeGeometries(kerbGeos), new THREE.MeshStandardMaterial({ color: 0x5a5468, roughness: 0.7 })));
+  const hedges = new THREE.Mesh(mergeGeometries(hedgeGeos), new THREE.MeshStandardMaterial({ color: 0x1f4a33, roughness: 0.95 }));
+  hedges.castShadow = true;
+  hedges.receiveShadow = true;
+  group.add(hedges);
 
   // Parked cars along the kerbs (instanced, cheap).
   const parkedBody = mergeGeometries([new THREE.BoxGeometry(1.9, 0.6, 4.2).translate(0, 0.62, 0), new THREE.BoxGeometry(1.6, 0.55, 2).translate(0, 1.2, -0.2)]);

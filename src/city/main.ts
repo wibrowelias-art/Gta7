@@ -242,8 +242,8 @@ async function boot(): Promise<void> {
       camLook.lerp(new THREE.Vector3(focus.x, 2, focus.z), Math.min(1, dt * 3));
     } else if (player.inCar) {
       const speed01 = Math.min(1, car.kmh / 165);
-      const dist = camMode === 1 ? 11 : camMode === 2 ? -0.2 : 6.8 + speed01 * 3;
-      const height = camMode === 1 ? 4.5 : camMode === 2 ? 1.5 : 2.6 + speed01 * 0.6;
+      const dist = camMode === 1 ? 11 : camMode === 2 ? -2.3 : 6.8 + speed01 * 3;
+      const height = camMode === 1 ? 4.5 : camMode === 2 ? 1.35 : 2.6 + speed01 * 0.6;
       const lateral = camMode === 2 ? 0 : -car.steer * 0.8;
       const target = focus.clone().addScaledVector(fwd, -dist).add(new THREE.Vector3(fwd.z * lateral, height, -fwd.x * lateral));
       camPos.lerp(target, Math.min(1, dt * (camMode === 2 ? 30 : 5.5)));
