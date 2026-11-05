@@ -9,6 +9,7 @@ export interface HudRefs {
   toast(text: string, tone?: 'good' | 'bad' | 'info'): void;
   drawMap(px: number, pz: number, heading: number, target: { x: number; z: number } | null, cars: { x: number; z: number }[], roadsX: number[], roadsZ: number[]): void;
   flash(): void;
+  setWanted(stars: number, max: number): void;
 }
 
 export function mountHud(root: HTMLElement, input: Input): HudRefs {
@@ -17,6 +18,7 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
       <div class="c-cash"><span class="c-label">CASH</span><span class="c-cash-v num">$0</span></div>
       <div class="c-speed"><span class="c-speed-v num">0</span><span class="c-label">KM/H</span></div>
     </div>
+    <div class="c-wanted" aria-label="Wanted level"></div>
     <div class="c-mission hidden"><div class="c-mission-title display"></div><div class="c-mission-detail"></div><div class="c-timer"><i></i></div></div>
     <div class="c-prompt"></div>
     <div class="c-toasts"></div>
@@ -45,6 +47,7 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
   const prompt = $('.c-prompt');
   const toasts = $('.c-toasts');
   const flash = $('.c-flash');
+  const wanted = $('.c-wanted');
   const canvas = $('canvas') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
 
@@ -144,6 +147,19 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
         el.classList.add('out');
         setTimeout(() => el.remove(), 300);
       }, 3200);
+    },
+    setWanted(stars, max) {
+      const key = `${stars}/${max}`;
+      if (wanted.dataset.k === key) return;
+      wanted.dataset.k = key;
+      wanted.innerHTML = '';
+      wanted.classList.toggle('show', stars > 0);
+      for (let i = 0; i < max; i++) {
+        const s = document.createElement('span');
+        s.className = 'c-star' + (i < stars ? ' on' : '');
+        s.textContent = '★';
+        wanted.appendChild(s);
+      }
     },
     flash() {
       flash.classList.remove('go');

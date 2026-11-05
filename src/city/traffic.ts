@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Rng } from '../game/rng';
 import { Car, CAR_COLORS } from './vehicle';
-import { buildHuman } from './player';
+import { buildHuman, OUTFITS, type HumanRig } from './human';
+import type { CarKind } from './vehicle';
 import { BLOCK, CELL, CITY_HALF, GRID, LANE, SIDEWALK, type Box2, type World } from './world';
 
 interface Driver {
@@ -15,7 +16,7 @@ interface Driver {
 
 export interface Ped {
   mesh: THREE.Group;
-  parts: ReturnType<typeof buildHuman>;
+  rig: HumanRig;
   pos: THREE.Vector3;
   heading: number;
   speed: number;
@@ -27,15 +28,21 @@ export interface Ped {
   vel: THREE.Vector3;
 }
 
-const SKINS = [0xe3b08a, 0xc98a5a, 0x8d5a3c, 0xf5d7c3, 0x6b4229, 0xd29a74];
-const CLOTHES = [0xff3d8b, 0xff8a3d, 0xffc857, 0x2ee6c8, 0x3fd0ff, 0x8b5cf6, 0x3dff8f, 0xfff4ec, 0x3a2b4a, 0x241c2e];
+
+export interface Police {
+  car: Car;
+  bar: THREE.Mesh[];
+}
 
 export class Traffic {
   drivers: Driver[] = [];
   peds: Ped[] = [];
   cars: Car[] = [];
+  police: Police[] = [];
   private rng: Rng;
   hits = 0;
+  /** Set when the player rams a traffic car hard. */
+  rammed = 0;
 
   constructor(private scene: THREE.Scene, private world: World, carCount: number, pedCount: number, seed = 3) {
     this.rng = new Rng(seed);
@@ -50,7 +57,8 @@ export class Traffic {
   }
 
   private spawnCar(): void {
-    const car = new Car(this.rng.pick(CAR_COLORS), false, false);
+    const kind: CarKind = this.rng.pick(['sedan', 'sedan', 'hatch', 'van', 'taxi', 'sports'] as CarKind[]);
+    const car = new Car(kind === 'taxi' ? 0xf2c230 : this.rng.pick(CAR_COLORS), false, false, kind);
     car.ai = true;
     const axis: 'x' | 'z' = this.rng.chance(0.5) ? 'x' : 'z';
     const dir: 1 | -1 = this.rng.chance(0.5) ? 1 : -1;
@@ -73,18 +81,99 @@ export class Traffic {
     const r = BLOCK / 2 + SIDEWALK - 1.6;
     const loop = [new THREE.Vector2(cx - r, cz - r), new THREE.Vector2(cx + r, cz - r), new THREE.Vector2(cx + r, cz + r), new THREE.Vector2(cx - r, cz + r)];
     if (this.rng.chance(0.5)) loop.reverse();
-    const parts = buildHuman(this.rng.pick(CLOTHES), this.rng.pick(CLOTHES), this.rng.pick(SKINS), this.rng.chance(0.5) ? 0x1a1016 : 0x5a2a1a);
+    const base = this.rng.pick(OUTFITS);
+    const rig = buildHuman({ ...base, top: this.rng.chance(0.5) ? base.top : this.rng.pick(OUTFITS).top, skin: this.rng.pick(OUTFITS).skin });
     const idx = this.rng.int(0, 3);
     const start = loop[idx].clone().lerp(loop[(idx + 1) % 4], this.rng.next());
-    const ped: Ped = { mesh: parts.group, parts, pos: new THREE.Vector3(start.x, 0.3, start.y), heading: 0, speed: this.rng.range(1.1, 1.8), loop, idx: (idx + 1) % 4, walkT: this.rng.next() * 10, hit: 0, vel: new THREE.Vector3() };
-    parts.group.position.copy(ped.pos);
-    parts.group.scale.setScalar(0.95 + this.rng.next() * 0.12);
-    this.scene.add(parts.group);
+    const ped: Ped = { mesh: rig.group, rig, pos: new THREE.Vector3(start.x, 0.3, start.y), heading: 0, speed: this.rng.range(1.0, 1.7), loop, idx: (idx + 1) % 4, walkT: this.rng.next() * 10, hit: 0, vel: new THREE.Vector3() };
+    rig.group.position.copy(ped.pos);
+    rig.group.scale.setScalar(0.94 + this.rng.next() * 0.12);
+    this.scene.add(rig.group);
     this.peds.push(ped);
   }
 
-  update(dt: number, playerCar: Car | null, allCars: Car[], solids: Box2[], t: number): void {
+  /** The closest car to a point within `radius`, or null. */
+  nearestCar(p: THREE.Vector3, radius: number, exclude: Car | null): Car | null {
+    let best: Car | null = null;
+    let bd = radius;
+    for (const c of this.cars) {
+      if (c === exclude) continue;
+      const d = Math.hypot(c.pos.x - p.x, c.pos.z - p.z);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /** The player takes this car: its AI driver bails out. */
+  release(car: Car): void {
+    const i = this.drivers.findIndex((d) => d.car === car);
+    if (i >= 0) this.drivers.splice(i, 1);
+    const pi = this.police.findIndex((p) => p.car === car);
+    if (pi >= 0) this.police.splice(pi, 1);
+  }
+
+  /** Spawn a police cruiser on a road some distance from the player. */
+  spawnPolice(near: THREE.Vector3): void {
+    const car = new Car(0xf2f2f2, false, false, 'sedan');
+    car.ai = true;
+    const axis: 'x' | 'z' = this.rng.chance(0.5) ? 'x' : 'z';
+    const roads = axis === 'x' ? this.world.roadsZ : this.world.roadsX;
+    const roadCoord = roads.reduce((a, b) => (Math.abs(b - (axis === 'x' ? near.z : near.x)) < Math.abs(a - (axis === 'x' ? near.z : near.x)) ? b : a));
+    const along = (axis === 'x' ? near.x : near.z) + (this.rng.chance(0.5) ? 1 : -1) * this.rng.range(70, 110);
+    const a = THREE.MathUtils.clamp(along, -CITY_HALF + 10, CITY_HALF - 10);
+    if (axis === 'x') car.place(a, roadCoord + 1.8, near.x > a ? Math.PI / 2 : -Math.PI / 2);
+    else car.place(roadCoord + 1.8, a, near.z > a ? 0 : Math.PI);
+    // Livery: blue doors band + roof light bar.
+    const band = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.26, 2.4), new THREE.MeshStandardMaterial({ color: 0x1f3f8a, roughness: 0.4 }));
+    band.position.set(0, 0.86, 0);
+    car.body.add(band);
+    const bar: THREE.Mesh[] = [];
+    for (const [sx, col] of [[-0.3, 0x3060ff], [0.3, 0xff2030]] as const) {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.3), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.2 }));
+      l.position.set(sx, 1.72, -0.2);
+      car.body.add(l);
+      bar.push(l);
+    }
+    car.setLights(true);
+    this.scene.add(car.mesh);
+    this.cars.push(car);
+    this.police.push({ car, bar });
+  }
+
+  removePolice(): void {
+    for (const p of this.police) {
+      this.scene.remove(p.car.mesh);
+      this.cars.splice(this.cars.indexOf(p.car), 1);
+    }
+    this.police = [];
+  }
+
+  update(dt: number, playerCar: Car | null, allCars: Car[], solids: Box2[], t: number, chaseTarget: THREE.Vector3 | null): void {
     const roads = this.world;
+    // Police: chase and ram the target.
+    for (const p of this.police) {
+      const c = p.car;
+      const flash = Math.sin(t * 14) > 0;
+      (p.bar[0].material as THREE.MeshStandardMaterial).emissiveIntensity = flash ? 4 : 0.2;
+      (p.bar[1].material as THREE.MeshStandardMaterial).emissiveIntensity = flash ? 0.2 : 4;
+      if (chaseTarget) {
+        const dx = chaseTarget.x - c.pos.x;
+        const dz = chaseTarget.z - c.pos.z;
+        const dist = Math.hypot(dx, dz);
+        let dh = Math.atan2(dx, dz) - c.heading;
+        dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+        const behind = Math.abs(dh) > Math.PI * 0.6;
+        c.input.steer = THREE.MathUtils.clamp(dh * 2.2, -1, 1);
+        c.input.throttle = behind && dist < 12 ? 0 : 1;
+        c.input.brake = behind && dist < 12 ? 0.8 : 0;
+        c.input.handbrake = false;
+        (c as any).__maxOverride = 34;
+      }
+      c.update(dt, solids, allCars);
+    }
     for (const d of this.drivers) {
       const c = d.car;
       const along = d.axis === 'x' ? c.pos.x : c.pos.z;
@@ -151,8 +240,12 @@ export class Traffic {
         const dz = playerCar.pos.z - c.pos.z;
         if (Math.hypot(dx, dz) < 10 && playerCar.kmh > 40) c.input.brake = 1;
       }
+      const before = c.lastHit;
+      c.lastHit = 0;
+      void before;
       void curAlong;
       c.update(dt, solids, allCars);
+      if (c.lastHit > 7 && playerCar && Math.hypot(playerCar.pos.x - c.pos.x, playerCar.pos.z - c.pos.z) < 5) this.rammed++;
       // Respawn far-away wrecks if stuck off-map.
       if (Math.abs(c.pos.x) > CITY_HALF + 30 || Math.abs(c.pos.z) > CITY_HALF + 30) {
         this.scene.remove(c.mesh);
@@ -191,12 +284,7 @@ export class Traffic {
         p.pos.x += Math.sin(p.heading) * p.speed * dt;
         p.pos.z += Math.cos(p.heading) * p.speed * dt;
       }
-      p.walkT += dt * (3 + p.speed * 2);
-      const swing = Math.sin(p.walkT) * 0.7;
-      p.parts.legL.rotation.x = swing;
-      p.parts.legR.rotation.x = -swing;
-      p.parts.armL.rotation.x = -swing * 0.7;
-      p.parts.armR.rotation.x = swing * 0.7;
+      p.rig.animate(t + p.walkT, p.speed, dt);
       p.mesh.position.copy(p.pos);
       p.mesh.rotation.y = p.heading;
       // Hit by a car.
@@ -217,6 +305,9 @@ export class Traffic {
         }
       }
     }
-    void t;
+  }
+
+  setLights(on: boolean): void {
+    for (const c of this.cars) c.setLights(on);
   }
 }

@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 
 const GradeShader = {
   uniforms: {
@@ -14,11 +15,12 @@ const GradeShader = {
     uGrain: { value: 0.04 },
     uChroma: { value: 1.0 },
     uSpeed: { value: 0 },
+    uWarm: { value: 0 },
     uResolution: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uVignette; uniform float uGrain; uniform float uChroma; uniform float uSpeed; uniform vec2 uResolution;
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uVignette; uniform float uGrain; uniform float uChroma; uniform float uSpeed; uniform float uWarm; uniform vec2 uResolution;
     varying vec2 vUv;
     float rnd(vec2 co){ return fract(sin(dot(co, vec2(12.9898,78.233)) + uTime) * 43758.5453); }
     void main(){
@@ -39,8 +41,9 @@ const GradeShader = {
       }
       // Film grade: teal shadows, warm highlights.
       float lum = dot(col, vec3(0.299, 0.587, 0.114));
-      col += vec3(0.02, 0.07, 0.08) * smoothstep(0.35, 0.0, lum);
-      col *= mix(vec3(1.0), vec3(1.06, 0.97, 0.9), smoothstep(0.5, 1.0, lum));
+      col += vec3(0.02, 0.05, 0.07) * smoothstep(0.35, 0.0, lum) * (1.0 - uWarm * 0.5);
+      col *= mix(vec3(1.0), vec3(1.08, 0.96, 0.86), smoothstep(0.45, 1.0, lum) * (0.5 + uWarm));
+      col = mix(col, col * vec3(1.06, 0.98, 0.9) + vec3(0.03, 0.01, 0.0), uWarm * 0.6);
       col = (col - 0.5) * 1.08 + 0.5;
       float vig = 1.0 - smoothstep(0.55, 1.3, r) * uVignette;
       col *= vig;
@@ -52,13 +55,26 @@ const GradeShader = {
 export interface Post {
   render(): void;
   resize(w: number, h: number): void;
-  update(t: number, speed01: number): void;
+  update(t: number, speed01: number, warm?: number): void;
 }
 
 export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, tier: 'high' | 'balanced' | 'battery'): Post {
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  let gtao: GTAOPass | null = null;
+  if (tier === 'high') {
+    try {
+      gtao = new GTAOPass(scene, camera, size.x, size.y);
+      gtao.output = GTAOPass.OUTPUT.Default;
+      gtao.blendIntensity = 0.7;
+      gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1, thickness: 1, distanceFallOff: 1, scale: 1.2, samples: 12, screenSpaceRadius: false });
+      composer.addPass(gtao);
+    } catch (err) {
+      console.warn('Ambient occlusion unavailable', err);
+      gtao = null;
+    }
+  }
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), tier === 'high' ? 0.9 : 0.65, tier === 'high' ? 0.6 : 0.4, 0.78);
   if (tier !== 'battery') composer.addPass(bloom);
   const grade = new ShaderPass(GradeShader);
@@ -71,10 +87,12 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
     render: () => composer.render(),
     resize(w, h) {
       composer.setSize(w, h);
+      gtao?.setSize(w, h);
       grade.uniforms.uResolution.value.set(w, h);
     },
-    update(t, speed01) {
+    update(t, speed01, warm = 0) {
       grade.uniforms.uTime.value = t % 1000;
+      grade.uniforms.uWarm.value = warm;
       grade.uniforms.uSpeed.value = Math.max(0, speed01 - 0.45) * 1.5;
     },
   };

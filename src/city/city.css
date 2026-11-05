@@ -257,3 +257,20 @@
 .loading-bar { width: 180px; height: 4px; border-radius: 2px; background: rgba(255,244,236,0.1); overflow: hidden; }
 .loading-bar i { display: block; height: 100%; width: 30%; background: var(--gold); animation: load 1.1s ease-in-out infinite alternate; }
 @keyframes load { to { transform: translateX(240%); } }
+
+.c-wanted {
+  position: absolute;
+  top: calc(var(--safe-top) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  font-size: 26px;
+  opacity: 0;
+  transition: opacity 200ms;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+.c-wanted.show { opacity: 1; }
+.c-star { color: rgba(255, 244, 236, 0.25); }
+.c-star.on { color: var(--gold); animation: starPop 300ms var(--ease-spring); }
+@keyframes starPop { from { transform: scale(1.6); } }

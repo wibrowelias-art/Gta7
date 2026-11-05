@@ -170,8 +170,8 @@ for (const vp of [
     expect(small, JSON.stringify(small)).toEqual([]);
     // Workers are at least 40px tall on a phone at the default zoom.
     if (vp.w < 700) {
-      const zoom = await page.evaluate(() => window.__neonhq.scene.cameraFocus().zoom);
-      expect(zoom * 92).toBeGreaterThanOrEqual(40);
+      // The establishing shot flies in from a wide view; wait for it to settle.
+      await expect.poll(() => page.evaluate(() => window.__neonhq.scene.cameraFocus().zoom * 92), { timeout: 20_000 }).toBeGreaterThanOrEqual(40);
     }
   });
 }

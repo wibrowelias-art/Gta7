@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 — NEON CITY: golden-hour look, carjacking and police
+
+Art direction moved from neon-night to a PS2-era open-world realism reference: golden-hour haze, warm plaster and brick blocks, long shadows, foggy horizons.
+- Keyframed gradient sky dome with sun disc, glow and lens flare; full day-night cycle (14 real minutes) driving sun, hemisphere, fog colour, exposure, window glow, street lamps and car headlights. `?hour=` forces a time.
+- Procedural facades (plaster, brick, concrete, curtain-wall glass, industrial) with window frames, sills, floor ledges and lit interiors at night; five districts (old town, residential, modern towers, industrial, central plaza); pitched tiled roofs with chimneys, cornices, awnings, shopfronts, kerbs, cobbled plaza with a monument column, low-poly trees, graffiti wall, an elevated brick rail viaduct with a running train, a needle tower and a domed hall on the horizon.
+- Properly proportioned humans (7.5 heads, hips/knees/elbows, hoodies, caps, sneakers) with walk, run and idle cycles; pedestrians use the same rig.
+- Five car silhouettes (sedan, hatchback, sports, van, taxi) with bevelled bodies, wheel arches, mirrors, plates and exhausts; sports car for the player.
+- Take any car on the street (E next to it); stealing one raises the wanted level. Hitting pedestrians or ramming traffic adds heat; stars appear in the HUD, police cruisers with light bars spawn and chase, sirens play, and the heat cools off when you lose them.
+- Ambient occlusion (GTAO) on the High tier; sun shadows fixed; speed blur and warm colour grade tied to the time of day.
+
 ## 1.1.0 — NEON CITY (first pass)
 
 An original open-world driving mini game added at `/` (NEON HQ moved to `/hq.html`).

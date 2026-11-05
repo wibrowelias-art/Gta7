@@ -60,7 +60,8 @@ Legend: `[x]` fixed in this pass · `[ ]` open
 - [x] A parked car crept backwards forever (brake-while-stopped meant reverse); the parking brake now holds.
 - [x] On-foot movement was inverted relative to the camera.
 - [x] The car's nose sank into buildings and dragged the camera inside walls; capsule collision + camera walk-back.
-- [ ] Car model is low-poly boxes; a proper mesh with bevels and interior would lift it further.
-- [ ] No day cycle yet (always night and rain); the HQ's atmosphere model could drive it.
+- [x] Car model is now bevelled with five silhouettes; interiors are still opaque glass.
+- [x] Day-night cycle with a keyframed sky dome replaces the always-night look.
+- [x] Sun shadows were missing (shadow camera never updated its projection).
 - [ ] Pedestrians have no reaction to the horn; traffic does not stop at the lights (lights are cosmetic).
 - [ ] Minimap has no building silhouettes yet.

@@ -105,6 +105,30 @@ export class CityAudio {
     }
   }
 
+  siren(on: boolean, distance01: number): void {
+    if (!this.ctx) return;
+    const s = (this as any).__siren as { o: OscillatorNode; g: GainNode; lfo: OscillatorNode } | null;
+    if (on && !s) {
+      const o = this.ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 700;
+      const lfo = this.ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.9;
+      const lg = this.ctx.createGain();
+      lg.gain.value = 260;
+      lfo.connect(lg).connect(o.frequency);
+      const g = this.ctx.createGain();
+      g.gain.value = 0;
+      o.connect(g).connect(this.master);
+      o.start();
+      lfo.start();
+      (this as any).__siren = { o, g, lfo };
+    }
+    const cur = (this as any).__siren as { o: OscillatorNode; g: GainNode; lfo: OscillatorNode } | null;
+    if (cur) cur.g.gain.setTargetAtTime(on ? 0.05 * (1 - distance01 * 0.8) : 0, this.ctx.currentTime, 0.1);
+  }
+
   chime(kind: 'cash' | 'checkpoint' | 'fail' | 'crash'): void {
     if (!this.ctx) return;
     const c = this.ctx;
