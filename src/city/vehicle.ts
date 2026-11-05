@@ -49,9 +49,9 @@ export class Car {
   constructor(color: number, withShadowLights = false, realLights = true, kind: CarKind = 'sedan') {
     this.color = color;
     this.kind = kind;
-    const paint = new THREE.MeshLambertMaterial({ color});
+    const paint = new THREE.MeshLambertMaterial({ color });
     const dark = new THREE.MeshLambertMaterial({ color: 0x1a1a1e});
-    const glass = new THREE.MeshLambertMaterial({ color: 0x2a3a4a, transparent: true, opacity: 0.8 });
+    const glass = new THREE.MeshLambertMaterial({ color: 0x1a2430, transparent: true, opacity: 0.72 });
     const chrome = new THREE.MeshLambertMaterial({ color: 0xd8d8e0});
     this.tailMat = new THREE.MeshLambertMaterial({ color: 0x8a1010, emissive: 0xff2030, emissiveIntensity: 0.2 });
     this.headMat = new THREE.MeshLambertMaterial({ color: 0xfff4ec, emissive: 0xfff0d0, emissiveIntensity: 0.1 });
@@ -75,72 +75,110 @@ export class Car {
       taxi: { len: 4.6, wid: 1.86, lowH: 0.56, cabinZ: -0.2, cabinL: 2.1, cabinH: 0.55, hoodL: 1.5, trunkL: 1.1 },
       bus: { len: 11.0, wid: 2.5, lowH: 1.0, cabinZ: 0, cabinL: 10.4, cabinH: 1.5, hoodL: 0.3, trunkL: 0.0 },
     }[kind];
-    const lower = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid, P.lowH, P.len), paint));
-    lower.position.y = 0.42 + P.lowH / 2;
-    b.add(lower);
-    // Hood and trunk as slightly narrower, lower slabs with a rake.
-    const hood = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.1, 0.22, P.hoodL), paint));
-    hood.position.set(0, 0.42 + P.lowH + 0.08, P.len / 2 - P.hoodL / 2 - 0.1);
-    hood.rotation.x = 0.06;
-    b.add(hood);
-    if (P.trunkL > 0.2) {
-      const trunk = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.1, 0.24, P.trunkL), paint));
-      trunk.position.set(0, 0.42 + P.lowH + 0.1, -P.len / 2 + P.trunkL / 2 + 0.1);
-      b.add(trunk);
+    // Body: a side-profile silhouette (bumper → hood → windscreen → roof → rear glass → tail) extruded across the width
+    // with a bevel, so the shell reads as one smooth low-poly car like an early-2000s model, not a stack of boxes.
+    const y0 = 0.42;
+    const L = P.len / 2;
+    const hoodY = y0 + P.lowH;
+    const roofY = hoodY + P.cabinH;
+    const cabF = P.cabinZ + P.cabinL / 2; // windscreen base
+    const cabB = P.cabinZ - P.cabinL / 2; // rear glass base
+    const rake = kind === 'sports' ? 0.75 : kind === 'van' || kind === 'bus' ? 0.25 : 0.55;
+    const profile = new THREE.Shape();
+    profile.moveTo(L, y0 + 0.12);
+    profile.lineTo(L, hoodY - 0.14);
+    profile.lineTo(L - 0.25, hoodY);
+    profile.lineTo(cabF + 0.05, hoodY + (kind === 'van' || kind === 'bus' ? 0.2 : 0.05));
+    profile.lineTo(cabF - rake, roofY);
+    profile.lineTo(cabB + rake * 0.7, roofY);
+    profile.lineTo(cabB - (P.trunkL > 0.2 ? 0.1 : 0.35), hoodY + (P.trunkL > 0.2 ? 0.1 : 0.0));
+    profile.lineTo(-L + 0.15, hoodY + (P.trunkL > 0.2 ? 0.06 : 0.0));
+    profile.lineTo(-L, hoodY - 0.16);
+    profile.lineTo(-L, y0 + 0.12);
+    profile.lineTo(-L + 0.3, y0);
+    profile.lineTo(L - 0.3, y0);
+    profile.closePath();
+    const bodyGeo = new THREE.ExtrudeGeometry(profile, { depth: P.wid - 0.3, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.14, bevelSegments: 2, curveSegments: 2 });
+    bodyGeo.rotateY(Math.PI / 2);
+    bodyGeo.translate(-(P.wid - 0.3) / 2, 0, 0);
+    bodyGeo.computeVertexNormals();
+    const shell = sh(new THREE.Mesh(bodyGeo, paint));
+    b.add(shell);
+    // Glass: the cabin section as a second, slightly inset extrusion so pillars are paint and panes are dark glass.
+    const gl = new THREE.Shape();
+    gl.moveTo(cabF + 0.02, hoodY + 0.06);
+    gl.lineTo(cabF - rake + 0.05, roofY - 0.04);
+    gl.lineTo(cabB + rake * 0.7 - 0.05, roofY - 0.04);
+    gl.lineTo(cabB - 0.08, hoodY + 0.08);
+    gl.closePath();
+    const glassGeo = new THREE.ExtrudeGeometry(gl, { depth: P.wid - 0.08, bevelEnabled: false });
+    glassGeo.rotateY(Math.PI / 2);
+    glassGeo.translate(-(P.wid - 0.08) / 2, 0, 0);
+    b.add(new THREE.Mesh(glassGeo, glass));
+    // Dark cabin interior volume behind the glass so the windows read as windows, not a grey block.
+    const interior = new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.3, P.cabinH - 0.14, P.cabinL - rake * 1.2 - 0.1), new THREE.MeshLambertMaterial({ color: 0x0c0e12 }));
+    interior.position.set(0, hoodY + (P.cabinH - 0.14) / 2 + 0.02, P.cabinZ - rake * 0.15);
+    b.add(interior);
+    // Roof pillars front/back as thin paint strips over the glass edges.
+    for (const [z0, z1] of [[cabF + 0.02, cabF - rake + 0.05], [cabB - 0.08, cabB + rake * 0.7 - 0.05]] as const) {
+      for (const sx of [-1, 1]) {
+        const dx = z1 - z0;
+        const dy = roofY - hoodY - 0.1;
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.08, Math.hypot(dx, dy), 0.1), paint);
+        pillar.position.set(sx * (P.wid / 2 - 0.08), hoodY + 0.05 + dy / 2, (z0 + z1) / 2);
+        pillar.rotation.x = Math.atan2(dx, dy);
+        b.add(pillar);
+      }
     }
-    // Cabin: glass block with paint pillars and roof.
-    const cabin = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.22, P.cabinH, P.cabinL), glass));
-    cabin.position.set(0, 0.42 + P.lowH + P.cabinH / 2 + 0.05, P.cabinZ);
-    b.add(cabin);
-    const roof = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.3, 0.1, P.cabinL - 0.3), paint));
-    roof.position.set(0, cabin.position.y + P.cabinH / 2, P.cabinZ);
-    b.add(roof);
-    for (const z of [P.cabinZ + P.cabinL / 2 - 0.06, P.cabinZ - P.cabinL / 2 + 0.06]) {
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.24, P.cabinH - 0.1, 0.1), dark);
-      pillar.position.set(0, cabin.position.y, z);
-      b.add(pillar);
-    }
-    // Wheel arches (dark recesses) so the wheels sit inside the body.
-    const archGeo = new THREE.TorusGeometry(0.42, 0.05, 6, 16);
+    const roof = { position: { y: roofY } };
+    const cabin = { position: { y: hoodY + P.cabinH / 2 } };
+    // Wheel arches: dark recesses cut into the sides.
+    const archGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.34, 12, 1, false, 0, Math.PI);
     for (const [sx, sz] of [[-1, 1.45], [1, 1.45], [-1, -1.45], [1, -1.45]] as const) {
       const arch = new THREE.Mesh(archGeo, dark);
+      arch.rotation.z = Math.PI / 2;
       arch.rotation.y = Math.PI / 2;
-      arch.position.set(sx * (P.wid / 2 - 0.02), 0.44, sz * (P.len / 4.6));
+      arch.position.set(sx * (P.wid / 2 - 0.1), 0.44, sz * (P.len / 4.6));
       b.add(arch);
     }
-    // Bumpers, grille, mirrors, plates, exhaust.
-    const bumperF = new THREE.Mesh(new THREE.BoxGeometry(P.wid + 0.02, 0.28, 0.32), dark);
-    bumperF.position.set(0, 0.42, P.len / 2 - 0.05);
+    // Bumpers, grille, mirrors, plate, exhaust, door seams.
+    const bumperF = new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.1, 0.22, 0.2), dark);
+    bumperF.position.set(0, y0 + 0.12, L - 0.02);
     const bumperB = bumperF.clone();
-    bumperB.position.z = -P.len / 2 + 0.05;
+    bumperB.position.z = -L + 0.02;
     b.add(bumperF, bumperB);
-    const grille = new THREE.Mesh(new THREE.BoxGeometry(P.wid * 0.5, 0.2, 0.05), chrome);
-    grille.position.set(0, 0.42 + P.lowH * 0.6, P.len / 2 + 0.02);
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(P.wid * 0.45, 0.16, 0.05), dark);
+    grille.position.set(0, hoodY - 0.3, L + 0.01);
     b.add(grille);
     for (const sx of [-1, 1]) {
-      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.16), paint);
-      mirror.position.set(sx * (P.wid / 2 + 0.1), cabin.position.y - 0.05, P.cabinZ + P.cabinL / 2 - 0.1);
+      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.14), paint);
+      mirror.position.set(sx * (P.wid / 2 + 0.08), hoodY + 0.3, cabF - 0.05);
       b.add(mirror);
-      const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), chrome);
+      const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8), chrome);
       ex.rotation.x = Math.PI / 2;
-      ex.position.set(sx * 0.5, 0.32, -P.len / 2 - 0.05);
+      ex.position.set(sx * 0.5, 0.3, -L - 0.02);
       b.add(ex);
+      // Door seam lines.
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.01, P.lowH - 0.1, 0.02), dark);
+      seam.position.set(sx * (P.wid / 2 + 0.005), y0 + P.lowH / 2, P.cabinZ - P.cabinL * 0.05);
+      b.add(seam);
     }
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.02), new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
-    plate.position.set(0, 0.5, -P.len / 2 - 0.1);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.12, 0.02), new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
+    plate.position.set(0, y0 + 0.3, -L - 0.03);
     b.add(plate);
     if (kind === 'taxi') {
       const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.3), new THREE.MeshLambertMaterial({ color: 0xffd04a, emissive: 0xffc830, emissiveIntensity: 0.6 }));
-      sign.position.set(0, roof.position.y + 0.14, P.cabinZ);
+      sign.position.set(0, roof.position.y + 0.1, P.cabinZ);
       b.add(sign);
     }
+    void cabin;
     // Lights.
     for (const sx of [-0.62, 0.62]) {
-      const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.1), this.headMat);
-      h.position.set(sx * (P.wid / 1.86), 0.42 + P.lowH * 0.75, P.len / 2 + 0.03);
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.16, 0.06), this.headMat);
+      h.position.set(sx * (P.wid / 1.86 * 0.95), 0.42 + P.lowH * 0.72, P.len / 2 + 0.02);
       b.add(h);
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.1), this.tailMat);
-      t.position.set(sx * (P.wid / 1.86), 0.42 + P.lowH * 0.8, -P.len / 2 - 0.03);
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.06), this.tailMat);
+      t.position.set(sx * (P.wid / 1.86 * 0.95), 0.42 + P.lowH * 0.78, -P.len / 2 - 0.02);
       b.add(t);
       const glowTex = radialSpriteTexture();
       const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xfff0d0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -186,7 +224,7 @@ export class Car {
     const doorL = P.cabinL * 0.55;
     const hingeZ = P.cabinZ + P.cabinL / 2 - 0.05;
     this.door.position.set(-(P.wid / 2), 0.42 + P.lowH / 2, hingeZ);
-    const panel = sh(new THREE.Mesh(new THREE.BoxGeometry(0.06, P.lowH - 0.04, doorL), paint));
+    const panel = sh(new THREE.Mesh(new THREE.BoxGeometry(0.05, P.lowH - 0.12, doorL), paint));
     panel.position.set(0, 0, -doorL / 2);
     const win = new THREE.Mesh(new THREE.BoxGeometry(0.04, P.cabinH - 0.08, doorL - 0.2), glass);
     win.position.set(0.02, P.lowH / 2 + P.cabinH / 2 + 0.02, -doorL / 2);
@@ -203,10 +241,16 @@ export class Car {
       const hub = new THREE.Group();
       const w = sh(new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.26, 20), tyre));
       w.rotation.z = Math.PI / 2;
-      const rimM = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.28, 10), rim);
+      const rimM = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.28, 12), rim);
       rimM.rotation.z = Math.PI / 2;
-      const spokes = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.06), tyre);
-      hub.add(w, rimM, spokes);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.3, 8), dark);
+      cap.rotation.z = Math.PI / 2;
+      hub.add(w, rimM, cap);
+      for (let k = 0; k < 5; k++) {
+        const sp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.16), dark);
+        sp.rotation.x = (k / 5) * Math.PI;
+        hub.add(sp);
+      }
       const steerGroup = new THREE.Group();
       steerGroup.position.set(sx * (P.wid / 2 - 0.08), 0.37, sz * (P.len / 4.6));
       steerGroup.add(hub);

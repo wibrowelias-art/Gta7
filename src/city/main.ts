@@ -66,7 +66,7 @@ async function boot(): Promise<void> {
   const groundMat = ground?.material as THREE.MeshLambertMaterial | undefined;
   let mirror: Reflector | null = null;
   if (tier !== 'battery') {
-    mirror = new Reflector(new THREE.PlaneGeometry(CITY_HALF * 2 + 40, CITY_HALF * 2 + 40), { textureWidth: 512, textureHeight: 512, color: 0x3a3a44, clipBias: 0.003, multisample: 0 });
+    mirror = new Reflector(new THREE.PlaneGeometry(CITY_HALF * 2 + 40, CITY_HALF * 2 + 40), { textureWidth: 512, textureHeight: 512, color: 0x202026, clipBias: 0.003, multisample: 0 });
     mirror.rotation.x = -Math.PI / 2;
     mirror.position.y = -0.02;
     mirror.visible = false;
@@ -404,10 +404,11 @@ async function boot(): Promise<void> {
     near.forEach((l, i) => lampPool[i].position.set(l.x, 6.3, l.z));
     rain.visible = nightK > 0.6;
     // Wet look: fade the asphalt toward the mirror as night comes in (and keep it wet during rain).
-    const wet = Math.max(nightK * 0.8, rain.visible ? 1 : 0, atm.warmth * 0.25);
+    // Wet roads only once the sun is down (and in rain): the mirror stays hidden by day.
+    const wet = Math.max(nightK, rain.visible ? 1 : 0);
     if (mirror && groundMat) {
-      mirror.visible = wet > 0.15;
-      groundMat.opacity = 1 - wet * 0.3;
+      mirror.visible = wet > 0.2;
+      groundMat.opacity = 1 - wet * 0.22;
     }
     // Rain follows the camera.
     rain.position.set(camPos.x, 0, camPos.z);

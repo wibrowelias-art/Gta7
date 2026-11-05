@@ -144,6 +144,19 @@ export function facadeTexture(style: FacadeStyle, seed: number): Facade {
     }
   }
   grain(g, 512, 512, rng, 2500, 0.06);
+  // Painted ambient occlusion: darker bottom of each floor band, dirt streaks under sills.
+  for (let r = 0; r < 4; r++) {
+    const band = g.createLinearGradient(0, r * 128 + 96, 0, r * 128 + 128);
+    band.addColorStop(0, 'rgba(0,0,0,0)');
+    band.addColorStop(1, 'rgba(0,0,0,0.22)');
+    g.fillStyle = band;
+    g.fillRect(0, r * 128 + 96, 512, 32);
+  }
+  for (let i = 0; i < 30; i++) {
+    const x = rng.next() * 512;
+    g.fillStyle = `rgba(30,20,10,${(rng.next() * 0.1).toFixed(3)})`;
+    g.fillRect(x, rng.next() * 512, 2 + rng.next() * 4, 40 + rng.next() * 80);
+  }
   return {
     map: finish(c),
     emissive: finish(e),
@@ -277,20 +290,65 @@ export function graffitiTexture(seed: number): THREE.CanvasTexture {
 }
 
 export function cloudTexture(seed = 11): THREE.CanvasTexture {
+  // Sunset cloud sheet: long horizontal streaks with brighter lit edges, a few puffy cumulus, soft gaps.
   const rng = new Rng(seed);
   const [c, g] = canvas(1024, 512);
   g.clearRect(0, 0, 1024, 512);
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < 90; i++) {
     const x = rng.next() * 1024;
-    const y = 60 + rng.next() * 300;
-    const r = 20 + rng.next() * 90;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, `rgba(255,255,255,${(0.25 + rng.next() * 0.35).toFixed(2)})`);
+    const y = 40 + rng.next() * 400;
+    const w = 120 + rng.next() * 380;
+    const h = 10 + rng.next() * 34;
+    const grad = g.createRadialGradient(x, y, 0, x, y, w / 2);
+    grad.addColorStop(0, `rgba(255,255,255,${(0.35 + rng.next() * 0.35).toFixed(2)})`);
+    grad.addColorStop(0.6, `rgba(255,255,255,${(0.12 + rng.next() * 0.15).toFixed(2)})`);
     grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.save();
+    g.translate(x, y);
+    g.scale(1, h / (w / 2));
+    g.translate(-x, -y);
     g.fillStyle = grad;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
+    g.fillRect(x - w, y - w, w * 2, w * 2);
+    g.restore();
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rng.next() * 1024;
+    const y = 120 + rng.next() * 280;
+    for (let k = 0; k < 6; k++) {
+      const r = 18 + rng.next() * 40;
+      const px = x + (rng.next() - 0.5) * 90;
+      const py = y + (rng.next() - 0.5) * 30;
+      const grad = g.createRadialGradient(px, py, 0, px, py, r);
+      grad.addColorStop(0, `rgba(255,255,255,${(0.5 + rng.next() * 0.4).toFixed(2)})`);
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(px - r, py - r, r * 2, r * 2);
+    }
   }
   const t = finish(c);
+  return t;
+}
+
+/** A painted tree crown: a mass of leaf clusters with lit top and dark underside, alpha outside. */
+export function foliageTexture(seed = 17): THREE.CanvasTexture {
+  const rng = new Rng(seed);
+  const [c, g] = canvas(256, 256);
+  g.clearRect(0, 0, 256, 256);
+  for (let i = 0; i < 140; i++) {
+    const a = rng.next() * Math.PI * 2;
+    const rr = rng.next() * 95;
+    const x = 128 + Math.cos(a) * rr;
+    const y = 118 + Math.sin(a) * rr * 0.85;
+    const r = 12 + rng.next() * 22;
+    const lit = (118 - y) / 100 + rng.next() * 0.3;
+    const v = 50 + lit * 70;
+    g.fillStyle = `rgb(${Math.round(v * 0.75)},${Math.round(v + 30)},${Math.round(v * 0.5)})`;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  const t = finish(c);
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
 

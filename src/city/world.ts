@@ -14,7 +14,7 @@ function mergeSafe(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return merged;
 }
 import { Rng } from '../game/rng';
-import { asphaltTexture, cobbleTexture, facadeTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
+import { asphaltTexture, cobbleTexture, facadeTexture, foliageTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
 import { buildProps, type PropsOut, type Solid3 } from './props';
 
 /** City layout constants (metres). */
@@ -214,10 +214,11 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     solids.push({ minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.3, maxZ: z + 0.3 });
     const lean = (rng.next() - 0.5) * 0.1;
     treeTrunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h / 2 + 0.3, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, lean)), new THREE.Vector3(1, h, 1)));
-    const r = 2.2 + rng.next() * 1.6;
-    for (let i = 0; i < 3; i++) {
-      treeCanopies.push(new THREE.Matrix4().compose(new THREE.Vector3(x + (rng.next() - 0.5) * r * 0.9, h + 0.3 + i * r * 0.45 + (rng.next() - 0.5), z + (rng.next() - 0.5) * r * 0.9), new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.next() * 3, rng.next() * 3, 0)), new THREE.Vector3(r * (1 - i * 0.2), r * 0.8 * (1 - i * 0.2), r * (1 - i * 0.2))));
-    }
+    const r = 2.6 + rng.next() * 1.8;
+    // Crown: two crossed painted cards (classic low-poly tree) plus a flat top card.
+    const rot = rng.next() * Math.PI;
+    for (let i = 0; i < 2; i++) treeCanopies.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h + 0.3 + r * 0.55, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot + (i * Math.PI) / 2, 0)), new THREE.Vector3(r * 2.1, r * 1.9, 1)));
+    treeCanopies.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h + 0.3 + r * 0.7, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, rot)), new THREE.Vector3(r * 1.8, r * 1.8, 1)));
   };
 
   for (let bx = 0; bx < GRID; bx++) {
@@ -510,11 +511,11 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   treeTrunks.forEach((m, i) => trunkMesh.setMatrixAt(i, m));
   trunkMesh.castShadow = false;
   group.add(trunkMesh);
-  const canopyMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0x4f7a3a, flatShading: true }), Math.max(1, treeCanopies.length));
+  const canopyMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshLambertMaterial({ map: foliageTexture(), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide, color: 0xffffff }), Math.max(1, treeCanopies.length));
   const cc = new THREE.Color();
   treeCanopies.forEach((m, i) => {
     canopyMesh.setMatrixAt(i, m);
-    canopyMesh.setColorAt(i, cc.setHSL(0.25 + rng.next() * 0.08, 0.45, 0.28 + rng.next() * 0.14));
+    canopyMesh.setColorAt(i, cc.setHSL(0.24 + rng.next() * 0.06, 0.35, 0.55 + rng.next() * 0.25));
   });
   canopyMesh.castShadow = quality !== 'battery';
   canopyMesh.receiveShadow = false;

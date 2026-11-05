@@ -96,7 +96,7 @@ export class SkyDome {
     ct.repeat.set(3, 1);
     this.clouds = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshBasicMaterial({ map: ct, transparent: true, opacity: 0.5, depthWrite: false, fog: false }));
     this.clouds.rotation.x = Math.PI / 2;
-    this.clouds.position.y = 420;
+    this.clouds.position.y = 380;
     this.clouds.renderOrder = -1;
     scene.add(this.clouds);
 
@@ -164,8 +164,8 @@ export class SkyDome {
     fog.density = 0.0042 + a.warmth * 0.0016 + a.night * 0.0012;
     void renderer;
     // Clouds and stars.
-    (this.clouds.material as THREE.MeshBasicMaterial).color.copy(new THREE.Color(0xfff0e0).lerp(new THREE.Color(0xff9a6a), a.warmth * 0.5).lerp(new THREE.Color(0x1a2038), a.night));
-    (this.clouds.material as THREE.MeshBasicMaterial).opacity = 0.35 + a.warmth * 0.25;
+    (this.clouds.material as THREE.MeshBasicMaterial).color.copy(new THREE.Color(0xfff0e0).lerp(new THREE.Color(0xff7a4a), a.warmth * 0.7).lerp(new THREE.Color(0x1a2038), a.night));
+    (this.clouds.material as THREE.MeshBasicMaterial).opacity = 0.55 + a.warmth * 0.3 - a.night * 0.3;
     const ct = (this.clouds.material as THREE.MeshBasicMaterial).map!;
     ct.offset.x += dt * 0.0015;
     this.clouds.position.set(focus.x, 420, focus.z);

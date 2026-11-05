@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 — NEON CITY: models matched to the reference
+
+- Cars: one smooth low-poly shell per vehicle extruded from a side-profile silhouette with a bevel (nose, raked windscreen, roof, rear glass, tail), inset dark glass with a cabin interior volume, paint pillars, half-cylinder wheel arches, door seams, spoked rims.
+- Characters: rounded low-poly limbs (8-sided tubes), tapered chest, hood resting on the shoulders, painted cloth textures (fabric grain, hem, kangaroo pocket, drawstrings, jeans inseam), painted faces with hairline, ears, chunky sneakers with pale soles.
+- Sky: layered sunset cloud sheet (streaks + cumulus) tinted by time of day.
+- Trees: crossed painted foliage cards with a lit top / dark underside instead of icosahedron blobs.
+- Facades: painted per-floor ambient-occlusion bands and dirt streaks.
+- Wet road mirror only after sunset or in rain, darker and lighter-blended so it no longer paints the street red.
+
 ## 1.4.0 — NEON CITY: PS2-era art direction, NPCs, props, parkour, traffic lights
 
 Art direction pivoted to an intentional early-2000s open-world look (same map, missions, cars and controls).
