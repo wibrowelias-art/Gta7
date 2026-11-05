@@ -16,7 +16,7 @@ function mergeSafe(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 import { Rng } from '../game/rng';
 import { asphaltTexture, cobbleTexture, facadeTexture, foliageTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
 import { buildProps, type PropsOut, type Solid3 } from './props';
-import { neonLabelTexture, shopfrontTexture } from './textures';
+import { coneTexture, neonLabelTexture, puddleTexture, shopfrontTexture, skidTexture, skylineTexture } from './textures';
 
 const SHOP_NAMES = ['BAKERY', 'KIOSK 24', 'LAUNDRY', 'BARBER', 'NOODLE BAR', 'VINYL', 'PHARMACY', 'CAFÉ LUNA', 'TATTOO', 'FISH MARKET', 'BOOKS', 'REPAIRS', 'PIZZA', 'FLOWERS', 'ARCADE'];
 const SIGN_COLORS = [0xc8352a, 0x2a6a9a, 0x2f7a55, 0xe8b530, 0x7a3a8a, 0xd96a2a];
@@ -204,6 +204,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const lampHeadGeos: THREE.BufferGeometry[] = [];
   const hedgeGeos: THREE.BufferGeometry[] = [];
   const woodGeos: THREE.BufferGeometry[] = [];
+  const skylineRings: THREE.Mesh[] = [];
   const blockInfo: { cx: number; cz: number; half: number; district: string }[] = [];
   const roofTops: { x: number; z: number; minX: number; maxX: number; minZ: number; maxZ: number; y: number }[] = [];
   let rooftopSpot: THREE.Vector3 | null = null;
@@ -423,10 +424,45 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
           par.translate(lot.x, hgt + 0.9, lot.z);
           roofGeos.push(par);
           for (let k = 0; k < 2 + rng.int(0, 3); k++) {
-            const ac = new THREE.BoxGeometry(2 + rng.next() * 2, 1.4, 2 + rng.next() * 2);
-            ac.translate(lot.x + (rng.next() - 0.5) * (w - 6), hgt + 1.3, lot.z + (rng.next() - 0.5) * (d - 6));
+            const ax = lot.x + (rng.next() - 0.5) * (w - 6);
+            const az = lot.z + (rng.next() - 0.5) * (d - 6);
+            const ac = new THREE.BoxGeometry(1.6 + rng.next() * 1.4, 1.1, 1.6 + rng.next() * 1.4);
+            ac.translate(ax, hgt + 1.1, az);
             roofGeos.push(ac);
+            const fan = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 10);
+            fan.translate(ax, hgt + 1.7, az);
+            darkGeos.push(fan);
           }
+          // Railing along the parapet, a water tank, pipes and a vent stack.
+          const railH = 1.0;
+          for (const [rx, rz, rw, rd] of [[lot.x, lot.z - d / 2, w, 0.06], [lot.x, lot.z + d / 2, w, 0.06], [lot.x - w / 2, lot.z, 0.06, d], [lot.x + w / 2, lot.z, 0.06, d]] as const) {
+            const bar = new THREE.BoxGeometry(rw, 0.06, rd);
+            bar.translate(rx, hgt + 1.5 + railH, rz);
+            darkGeos.push(bar);
+          }
+          if (rng.next() > 0.45) {
+            const tx = lot.x + (rng.next() - 0.5) * (w - 8);
+            const tz = lot.z + (rng.next() - 0.5) * (d - 8);
+            const tank = new THREE.CylinderGeometry(1.6, 1.6, 3, 10);
+            tank.translate(tx, hgt + 3.8, tz);
+            woodGeos.push(tank);
+            const lid = new THREE.ConeGeometry(1.7, 0.8, 10);
+            lid.translate(tx, hgt + 5.7, tz);
+            darkGeos.push(lid);
+            for (const [lx, lz] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]] as const) {
+              const leg = new THREE.BoxGeometry(0.15, 2.2, 0.15);
+              leg.translate(tx + lx, hgt + 1.4, tz + lz);
+              darkGeos.push(leg);
+            }
+          }
+          for (let k = 0; k < 2; k++) {
+            const vent = new THREE.CylinderGeometry(0.22, 0.22, 1.2 + rng.next(), 8);
+            vent.translate(lot.x + (rng.next() - 0.5) * (w - 4), hgt + 0.9, lot.z + (rng.next() - 0.5) * (d - 4));
+            darkGeos.push(vent);
+          }
+          const pipe = new THREE.BoxGeometry(w - 4, 0.14, 0.14);
+          pipe.translate(lot.x, hgt + 0.45, lot.z - d / 2 + 1.5);
+          darkGeos.push(pipe);
           if (rng.next() > 0.5) {
             const ant = new THREE.CylinderGeometry(0.1, 0.2, 6 + rng.next() * 12, 6);
             ant.translate(lot.x + (rng.next() - 0.5) * (w - 4), hgt + 4, lot.z + (rng.next() - 0.5) * (d - 4));
@@ -503,7 +539,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const windowMats: THREE.MeshLambertMaterial[] = [];
   for (const { facade, geos } of buildings.values()) {
     if (!geos.length) continue;
-    const mat = new THREE.MeshLambertMaterial({ map: facade.map, emissiveMap: facade.emissive, emissive: 0xffffff, emissiveIntensity: 0, color: facade.color });
+    const mat = new THREE.MeshLambertMaterial({ map: facade.map, emissiveMap: facade.emissive, emissive: 0xffd9a8, emissiveIntensity: 0, color: facade.color });
     windowMats.push(mat);
     const m = new THREE.Mesh(mergeSafe(geos), mat);
     m.castShadow = false;
@@ -551,6 +587,39 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     drainGeos.push(mh);
   }
   group.add(new THREE.Mesh(mergeSafe(drainGeos), new THREE.MeshLambertMaterial({ color: 0x2e2c2a })));
+  // Tyre marks curving out of intersections and puddles along the gutters.
+  const dm = new THREE.Matrix4();
+  const skidMat = new THREE.MeshBasicMaterial({ map: skidTexture(), transparent: true, depthWrite: false, opacity: 0.8 });
+  const skids = new THREE.InstancedMesh(new THREE.PlaneGeometry(14, 3.2), skidMat, 60);
+  let si = 0;
+  for (let i = 0; i < 60; i++) {
+    const alongX = rng.chance(0.5);
+    const road = alongX ? rng.pick(roadsZ) : rng.pick(roadsX);
+    const cross = alongX ? rng.pick(roadsX) : rng.pick(roadsZ);
+    const off = (rng.chance(0.5) ? 1 : -1) * (LANE / 2 + 0.3);
+    const along = cross + (rng.chance(0.5) ? 1 : -1) * (12 + rng.next() * 16);
+    const x = alongX ? along : road + off;
+    const z = alongX ? road + off : along;
+    dm.compose(new THREE.Vector3(x, 0.02, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, (alongX ? 0 : Math.PI / 2) + (rng.next() - 0.5) * 0.5)), new THREE.Vector3(1, 1, 1));
+    skids.setMatrixAt(si++, dm);
+  }
+  skids.renderOrder = 1;
+  group.add(skids);
+  const puddleMat = new THREE.MeshBasicMaterial({ map: puddleTexture(), color: 0x6a7080, transparent: true, opacity: 0, depthWrite: false });
+  const puddles = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), puddleMat, 120);
+  for (let i = 0; i < 120; i++) {
+    const alongX = rng.chance(0.5);
+    const road = alongX ? rng.pick(roadsZ) : rng.pick(roadsX);
+    const along = rng.range(-CITY_HALF, CITY_HALF);
+    const off = (rng.chance(0.5) ? 1 : -1) * (ROAD / 2 - SIDEWALK - 1.2);
+    const x = alongX ? along : road + off;
+    const z = alongX ? road + off : along;
+    const s = 2 + rng.next() * 4;
+    dm.compose(new THREE.Vector3(x, 0.025, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, rng.next() * 3)), new THREE.Vector3(s, s * 0.7, 1));
+    puddles.setMatrixAt(i, dm);
+  }
+  puddles.renderOrder = 1;
+  group.add(puddles);
 
   // Trees (instanced).
   const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7), new THREE.MeshLambertMaterial({ color: 0x5a4636}), Math.max(1, treeTrunks.length));
@@ -581,6 +650,27 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     pools.setMatrixAt(i, pm);
   });
   group.add(pools);
+  // Light cones hanging from each lamp head (two crossed billboards) and a bulb glow sprite.
+  const coneMat = new THREE.MeshBasicMaterial({ map: coneTexture(), color: 0xffd58a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const cones = new THREE.InstancedMesh(new THREE.PlaneGeometry(5.5, 6.4), coneMat, lamps.length * 2);
+  const bulbMat = new THREE.SpriteMaterial({ map: poolTex, color: 0xfff0c0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  lamps.forEach((l, i) => {
+    const hx = l.x + (l.x < 0 ? 2.0 : -2.0) * 0; // head sits ~2 m toward the road from the pole
+    const armDir = Math.sign(-(l.x % CELL + CELL) % CELL + CELL / 2) || 1;
+    const headX = l.x - armDir * 2.0;
+    for (let k = 0; k < 2; k++) {
+      pm.compose(new THREE.Vector3(headX + hx, 6.5 - 3.2, l.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, (k * Math.PI) / 2, 0)), new THREE.Vector3(1, 1, 1));
+      cones.setMatrixAt(i * 2 + k, pm);
+    }
+    const bulb = new THREE.Sprite(bulbMat);
+    bulb.position.set(headX, 6.5, l.z);
+    bulb.scale.set(2.4, 1.6, 1);
+    group.add(bulb);
+    pm.compose(new THREE.Vector3(headX, 0.34, l.z), pq, new THREE.Vector3(1, 1, 1));
+    pools.setMatrixAt(i, pm);
+  });
+  pools.instanceMatrix.needsUpdate = true;
+  group.add(cones);
   void hedgeGeos;
 
   /* ---------------- parked cars ---------------- */
@@ -779,6 +869,15 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const farMat = new THREE.MeshLambertMaterial({ map: farFacade.map, emissiveMap: farFacade.emissive, emissive: 0xffffff, emissiveIntensity: 0, color: 0xa09890});
   windowMats.push(farMat);
   group.add(new THREE.Mesh(mergeSafe(farGeos), farMat));
+  // Two silhouette rings with window-dot sheets, far beyond the modelled skyline; they catch the fog colour.
+  for (const [radius, tall, hgtS, seedS] of [[CITY_HALF + 700, false, 120, 3], [CITY_HALF + 1050, true, 260, 9]] as const) {
+    const tex = skylineTexture(seed + seedS, tall);
+    tex.repeat.set(6, 1);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, hgtS, 64, 1, true), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.BackSide, depthWrite: false, color: 0xffffff }));
+    ring.position.y = hgtS / 2;
+    skylineRings.push(ring);
+    group.add(ring);
+  }
   // A few distant spires and a dome.
   for (let i = 0; i < 6; i++) {
     const a = rng.next() * Math.PI * 2;
@@ -963,6 +1062,10 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       for (const sf of shopfronts.values()) sf.mat.emissiveIntensity = n * 0.45;
       lampHeadMat.emissiveIntensity = n * 3;
       poolMat.opacity = n * 0.35;
+      coneMat.opacity = n * 0.22;
+      bulbMat.opacity = n * 0.9;
+      puddleMat.opacity = 0.25 + n * 0.4;
+      for (const r of skylineRings) (r.material as THREE.MeshBasicMaterial).color.setScalar(1 - n * 0.6);
     },
   };
 }

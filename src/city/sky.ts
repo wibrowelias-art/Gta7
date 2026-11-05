@@ -161,7 +161,7 @@ export class SkyDome {
     // Fog colour follows the horizon: warm haze by day, deep blue at night.
     fog.color.copy(k.hor).lerp(k.mid, 0.3).lerp(k.sun, a.warmth * 0.12);
     // Heavy retro fog: the far end of every street dissolves into the sky colour.
-    fog.density = 0.0042 + a.warmth * 0.0016 + a.night * 0.0012;
+    fog.density = 0.0040 + a.warmth * 0.0016 + a.night * 0.0003;
     void renderer;
     // Clouds and stars.
     (this.clouds.material as THREE.MeshBasicMaterial).color.copy(new THREE.Color(0xfff0e0).lerp(new THREE.Color(0xff7a4a), a.warmth * 0.7).lerp(new THREE.Color(0x1a2038), a.night));

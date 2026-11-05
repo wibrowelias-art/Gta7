@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.3 — NEON CITY: night lighting, skyline, roof clutter, road decals
+
+- Every lamp post has a bulb glow sprite and crossed additive light cones at night; ground pools aligned under the heads.
+- Two silhouette skyline rings with window-dot sheets far beyond the modelled city; they darken at night.
+- Roof clutter: parapet railings, AC units with fans, water tanks on legs, vent stacks and pipes (seen from the train and rooftops).
+- Tyre-mark decals out of intersections and puddles along the gutters that strengthen at night.
+- Window glow is warm instead of white; night fog thinned so streets read deeper.
+
 ## 1.5.2 — NEON CITY: shopfronts, road surface, drains
 
 - Textured shopfront strip on every old-town/residential ground floor: 4 m bays with lit windows, shelves of goods, glazed doors, fascia bands and SALE/OPEN decals; they glow at night.

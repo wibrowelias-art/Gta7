@@ -495,3 +495,97 @@ export function shopfrontTexture(seed: number, accent: number): THREE.CanvasText
   }
   return finish(c);
 }
+
+/** Vertical light cone: bright at the top, fading out and widening toward the ground (used as a billboard under lamps). */
+export function coneTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(128, 256);
+  g.clearRect(0, 0, 128, 256);
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.28)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(56, 0);
+  g.lineTo(72, 0);
+  g.lineTo(128, 256);
+  g.lineTo(0, 256);
+  g.closePath();
+  g.fill();
+  // Soft the edges.
+  const side = g.createLinearGradient(0, 0, 128, 0);
+  side.addColorStop(0, 'rgba(0,0,0,1)');
+  side.addColorStop(0.3, 'rgba(0,0,0,0)');
+  side.addColorStop(0.7, 'rgba(0,0,0,0)');
+  side.addColorStop(1, 'rgba(0,0,0,1)');
+  g.globalCompositeOperation = 'destination-out';
+  g.fillStyle = side;
+  g.fillRect(0, 0, 128, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** Distant skyline silhouette strip with window-dot sheets; alpha above the roofline. */
+export function skylineTexture(seed: number, tall: boolean): THREE.CanvasTexture {
+  const rng = new Rng(seed);
+  const [c, g] = canvas(2048, 256);
+  g.clearRect(0, 0, 2048, 256);
+  let x = 0;
+  while (x < 2048) {
+    const w = 30 + rng.next() * 90;
+    const h = (tall ? 90 : 40) + rng.next() * (tall ? 150 : 80);
+    const shade = tall ? 70 + rng.next() * 30 : 95 + rng.next() * 30;
+    g.fillStyle = `rgb(${shade},${shade - 6},${shade - 10})`;
+    g.fillRect(x, 256 - h, w, h);
+    if (rng.next() > 0.6) g.fillRect(x + w * 0.3, 256 - h - 14 - rng.next() * 20, w * 0.4, 14 + 20);
+    if (rng.next() > 0.7) g.fillRect(x + w * 0.5 - 1, 256 - h - 30, 3, 30);
+    for (let wy = 256 - h + 6; wy < 250; wy += 9) for (let wx = x + 4; wx < x + w - 4; wx += 7) {
+      if (rng.next() > 0.45) continue;
+      g.fillStyle = rng.next() > 0.5 ? 'rgba(255,220,160,0.85)' : 'rgba(180,210,255,0.6)';
+      g.fillRect(wx, wy, 3, 4);
+    }
+    x += w + 2 + rng.next() * 10;
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** Decal sheet: a long skid mark pair and a puddle shape, each on alpha. */
+export function skidTexture(): THREE.CanvasTexture {
+  const [c, g] = canvas(256, 128);
+  g.clearRect(0, 0, 256, 128);
+  for (const y of [40, 88]) {
+    const grad = g.createLinearGradient(0, 0, 256, 0);
+    grad.addColorStop(0, 'rgba(10,10,10,0)');
+    grad.addColorStop(0.3, 'rgba(10,10,10,0.55)');
+    grad.addColorStop(0.8, 'rgba(10,10,10,0.45)');
+    grad.addColorStop(1, 'rgba(10,10,10,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, y - 7, 256, 14);
+  }
+  const t = new THREE.CanvasTexture(c);
+  return t;
+}
+export function puddleTexture(seed = 21): THREE.CanvasTexture {
+  const rng = new Rng(seed);
+  const [c, g] = canvas(128, 128);
+  g.clearRect(0, 0, 128, 128);
+  g.fillStyle = 'rgba(255,255,255,1)';
+  g.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const r = 38 + rng.next() * 22;
+    const px = 64 + Math.cos(a) * r;
+    const py = 64 + Math.sin(a) * r * 0.7;
+    if (i === 0) g.moveTo(px, py);
+    else g.quadraticCurveTo(64 + Math.cos(a - 0.26) * (r + 8), 64 + Math.sin(a - 0.26) * (r + 8) * 0.7, px, py);
+  }
+  g.closePath();
+  g.fill();
+  return new THREE.CanvasTexture(c);
+}
