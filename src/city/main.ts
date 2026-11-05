@@ -169,8 +169,12 @@ async function boot(): Promise<void> {
       if (inp.action) {
         if (player.inCar) {
           player.inCar = null;
-          player.pos.copy(pc.pos).addScaledVector(new THREE.Vector3(pc.forward.z, 0, -pc.forward.x), -2.4);
+          pc.driver.visible = false;
+          const side = new THREE.Vector3(pc.forward.z, 0, -pc.forward.x);
+          player.pos.copy(pc.pos).addScaledVector(side, -2.2);
+          if (world.solids.some((b) => player.pos.x > b.minX && player.pos.x < b.maxX && player.pos.z > b.minZ && player.pos.z < b.maxZ)) player.pos.copy(pc.pos).addScaledVector(side, 2.2);
           player.heading = pc.heading;
+          player.vel.set(0, 0, 0);
           pc.input = { throttle: 0, brake: 0, steer: 0, handbrake: true };
           hud.prompt(null);
         } else {
@@ -188,6 +192,7 @@ async function boot(): Promise<void> {
             playerCar = target;
             pc = target;
             player.inCar = target;
+            target.driver.visible = true;
             hud.prompt(null);
           }
         }
@@ -314,7 +319,7 @@ async function boot(): Promise<void> {
       camera.updateProjectionMatrix();
     }
     // Keep the camera out of buildings: walk it back toward the focus until it is clear.
-    const inside = (x: number, z: number) => world.solids.some((b) => x > b.minX - 0.4 && x < b.maxX + 0.4 && z > b.minZ - 0.4 && z < b.maxZ + 0.4);
+    const inside = (x: number, z: number) => world.solids.some((b) => b.maxX - b.minX > 3 && x > b.minX - 0.4 && x < b.maxX + 0.4 && z > b.minZ - 0.4 && z < b.maxZ + 0.4);
     const camFinal = camPos.clone();
     if (camMode !== 2 || !player.inCar) {
       for (let k = 0; k < 10 && inside(camFinal.x, camFinal.z); k++) camFinal.lerp(new THREE.Vector3(focus.x, camFinal.y, focus.z), 0.2);
@@ -383,7 +388,7 @@ async function boot(): Promise<void> {
     debugWanted(n: number) {
       wanted = n;
     },
-    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length }),
+    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
   };
 }
 

@@ -68,6 +68,7 @@ export class Traffic {
     const lanePos = roadCoord + this.laneOffset(axis, dir);
     if (axis === 'x') car.place(along, lanePos, dir > 0 ? Math.PI / 2 : -Math.PI / 2);
     else car.place(lanePos, along, dir > 0 ? 0 : Math.PI);
+    car.driver.visible = true;
     this.scene.add(car.mesh);
     this.cars.push(car);
     this.drivers.push({ car, axis, dir, lanePos, targetSpeed: this.rng.range(9, 14), nextTurnAt: null });
@@ -138,6 +139,7 @@ export class Traffic {
       bar.push(l);
     }
     car.setLights(true);
+    car.driver.visible = true;
     this.scene.add(car.mesh);
     this.cars.push(car);
     this.police.push({ car, bar });

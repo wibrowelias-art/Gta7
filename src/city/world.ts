@@ -149,6 +149,8 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const lampPoleGeos: THREE.BufferGeometry[] = [];
   const lampHeadGeos: THREE.BufferGeometry[] = [];
   const hedgeGeos: THREE.BufferGeometry[] = [];
+  const woodGeos: THREE.BufferGeometry[] = [];
+  const signGeos: THREE.BufferGeometry[] = [];
   const awningGeos: THREE.BufferGeometry[] = [];
   const facadeStyles: Record<District, FacadeStyle[]> = { oldtown: ['plaster', 'plaster', 'brick'], modern: ['glass', 'concrete', 'glass'], industrial: ['industrial', 'brick'], residential: ['plaster', 'concrete', 'brick'], plaza: ['plaster'] };
   const facadeFor = (style: FacadeStyle, variant: number): { key: string; facade: Facade } => {
@@ -158,6 +160,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   };
 
   const tree = (x: number, z: number, h: number) => {
+    solids.push({ minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.3, maxZ: z + 0.3 });
     const lean = (rng.next() - 0.5) * 0.1;
     treeTrunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h / 2 + 0.3, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, lean)), new THREE.Vector3(1, h, 1)));
     const r = 2.2 + rng.next() * 1.6;
@@ -183,6 +186,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         const lx = cx + sx * (half - 1.2);
         const lz = cz + sz * (half - 1.2);
         lamps.push({ x: lx, z: lz });
+        solids.push({ minX: lx - 0.2, maxX: lx + 0.2, minZ: lz - 0.2, maxZ: lz + 0.2 });
         const pole = new THREE.CylinderGeometry(0.1, 0.16, 6.5, 8);
         pole.translate(lx, 3.5, lz);
         const arm = new THREE.CylinderGeometry(0.07, 0.09, 2.2, 6);
@@ -253,7 +257,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         const floorH = district === 'modern' ? 3.6 : 3.5;
         const hgt = floors * floorH;
         const style = rng.pick(facadeStyles[district]);
-        const { key, facade } = facadeFor(style, rng.int(0, 1));
+        const { key, facade } = facadeFor(style, rng.int(0, 3));
         const geo = new THREE.BoxGeometry(w, hgt, d);
         facadeUVs(geo, w, hgt, d, facade.size[0], facade.size[1]);
         geo.translate(lot.x, hgt / 2 + 0.3, lot.z);
@@ -278,6 +282,35 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
           const shop = new THREE.BoxGeometry(w - 2, 2.2, d + 0.15);
           shop.translate(lot.x, 2.0, lot.z);
           glassGeos.push(shop);
+        }
+        // Per-floor ledges give the facade real depth; balconies on residential blocks.
+        if (district !== 'modern') {
+          for (let f = 1; f < floors; f++) {
+            const ledge = new THREE.BoxGeometry(w + 0.36, 0.14, d + 0.36);
+            ledge.translate(lot.x, f * floorH + 0.3, lot.z);
+            trimGeos.push(ledge);
+            if ((district === 'residential' || district === 'oldtown') && rng.next() > 0.45) {
+              const side = rng.chance(0.5) ? 1 : -1;
+              const bx = lot.x + (rng.next() - 0.5) * (w - 5);
+              const bz = lot.z + side * (d / 2 + 0.55);
+              const slab = new THREE.BoxGeometry(2.6, 0.16, 1.1);
+              slab.translate(bx, f * floorH + 0.3, bz);
+              trimGeos.push(slab);
+              const rail = new THREE.BoxGeometry(2.6, 0.9, 0.08);
+              rail.translate(bx, f * floorH + 0.8, bz + side * 0.52);
+              darkGeos.push(rail);
+              for (const rs of [-1.26, 1.26]) {
+                const rs2 = new THREE.BoxGeometry(0.08, 0.9, 1.1);
+                rs2.translate(bx + rs, f * floorH + 0.8, bz);
+                darkGeos.push(rs2);
+              }
+            }
+          }
+          // A doorway on the street side.
+          const dside = rng.chance(0.5) ? 1 : -1;
+          const door = new THREE.BoxGeometry(1.6, 2.6, 0.3);
+          door.translate(lot.x + (rng.next() - 0.5) * (w - 4), 1.6, lot.z + dside * (d / 2 + 0.1));
+          darkGeos.push(door);
         }
         // Cornice and roof.
         const cornice = new THREE.BoxGeometry(w + 0.8, 0.6, d + 0.8);
@@ -323,6 +356,56 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
           }
         }
       }
+      // Street furniture.
+      for (let i = 0; i < 2; i++) {
+        const bside = rng.chance(0.5) ? 1 : -1;
+        const bxp = cx + (rng.next() - 0.5) * (half * 2 - 12);
+        const bzp = cz + bside * (half - 1.4);
+        const seat = new THREE.BoxGeometry(1.8, 0.08, 0.5);
+        seat.translate(bxp, 0.75, bzp);
+        const back = new THREE.BoxGeometry(1.8, 0.45, 0.06);
+        back.translate(bxp, 1.02, bzp + bside * 0.24);
+        woodGeos.push(seat, back);
+        for (const lx of [-0.75, 0.75]) {
+          const leg = new THREE.BoxGeometry(0.08, 0.45, 0.5);
+          leg.translate(bxp + lx, 0.52, bzp);
+          darkGeos.push(leg);
+        }
+        const bin = new THREE.CylinderGeometry(0.28, 0.24, 0.9, 10);
+        bin.translate(bxp + 1.6, 0.75, bzp);
+        darkGeos.push(bin);
+      }
+      if ((bx + bz) % 3 === 0) {
+        // Bus shelter on the east sidewalk.
+        const sx = cx + half - 1.6;
+        const sz = cz + (rng.next() - 0.5) * 20;
+        const roofS = new THREE.BoxGeometry(1.6, 0.1, 4.2);
+        roofS.translate(sx, 2.6, sz);
+        darkGeos.push(roofS);
+        const backS = new THREE.BoxGeometry(0.08, 2.3, 4.2);
+        backS.translate(sx - 0.75, 1.45, sz);
+        glassGeos.push(backS);
+        for (const pz of [-2, 2]) {
+          const post = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6);
+          post.translate(sx + 0.7, 1.3, sz + pz);
+          darkGeos.push(post);
+        }
+        const sign = new THREE.BoxGeometry(0.06, 0.6, 0.6);
+        sign.translate(sx + 0.9, 2.9, sz - 2.3);
+        trimGeos.push(sign);
+      }
+      // Traffic signs at two corners.
+      for (const [sx, sz] of [[1, -1], [-1, 1]] as const) {
+        const px = cx + sx * (half - 0.6);
+        const pz = cz + sz * (half - 3);
+        const pole = new THREE.CylinderGeometry(0.04, 0.04, 2.6, 6);
+        pole.translate(px, 1.6, pz);
+        darkGeos.push(pole);
+        const plate = new THREE.CylinderGeometry(0.35, 0.35, 0.04, 12);
+        plate.rotateX(Math.PI / 2);
+        plate.translate(px, 2.7, pz);
+        signGeos.push(plate);
+      }
       // Street trees along the sidewalk.
       for (let i = 0; i < 4; i++) {
         if (rng.next() > 0.55) tree(cx - half + 1.8, cz - half + 8 + (i * (half * 2 - 16)) / 3, 4 + rng.next() * 2.5);
@@ -351,6 +434,21 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   if (trimGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(trimGeos), new THREE.MeshStandardMaterial({ color: 0xe6dccb, roughness: 0.8 }))));
   if (darkGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(darkGeos), new THREE.MeshStandardMaterial({ color: 0x4a443f, roughness: 0.85 }))));
   if (awningGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(awningGeos), new THREE.MeshStandardMaterial({ color: 0x8a3a30, roughness: 0.9 }))));
+  if (woodGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(woodGeos), new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 }))));
+  if (signGeos.length) group.add(new THREE.Mesh(mergeGeometries(signGeos), new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.5, emissive: 0x3344aa, emissiveIntensity: 0.3 })));
+  // Bollards around the central plaza.
+  const bollards: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2;
+    const r = BLOCK / 2 + SIDEWALK - 0.8;
+    const bx = Math.cos(a) * r;
+    const bz = Math.sin(a) * r;
+    if (Math.abs(bx) > r - 0.5 || Math.abs(bz) > r - 0.5) continue;
+    const bol = new THREE.CylinderGeometry(0.12, 0.14, 0.9, 8);
+    bol.translate(bx, 0.75, bz);
+    bollards.push(bol);
+  }
+  if (bollards.length) group.add(new THREE.Mesh(mergeGeometries(bollards), new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.6 })));
   const shopGlassMat = new THREE.MeshStandardMaterial({ color: 0x141a22, roughness: 0.35, metalness: 0.3, emissive: 0xffd9a0, emissiveIntensity: 0, envMapIntensity: 0.4 });
   if (glassGeos.length) group.add(new THREE.Mesh(mergeGeometries(glassGeos), shopGlassMat));
 
@@ -506,6 +604,30 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const domeBase = new THREE.Mesh(new THREE.BoxGeometry(90, 40, 70), new THREE.MeshStandardMaterial({ map: facadeFor('plaster', 0).facade.map, roughness: 0.9 }));
   domeBase.position.set(-CITY_HALF - 160, 20, -80);
   group.add(dome, domeBase);
+
+  // City edge: a kerb and railing around the ring road so the world has a clean boundary.
+  const edge = CITY_HALF + 7;
+  const edgeGeos: THREE.BufferGeometry[] = [];
+  for (const [x, z, w, d] of [[0, -edge, edge * 2 + 2, 2], [0, edge, edge * 2 + 2, 2], [-edge, 0, 2, edge * 2 + 2], [edge, 0, 2, edge * 2 + 2]] as const) {
+    const k = new THREE.BoxGeometry(w, 0.5, d);
+    k.translate(x, 0.25, z);
+    edgeGeos.push(k);
+    const railG = new THREE.BoxGeometry(w, 0.08, d > w ? 0.08 : 0.08);
+    railG.translate(x, 1.1, z);
+    edgeGeos.push(railG);
+    const n = Math.floor(Math.max(w, d) / 4);
+    for (let i = 0; i < n; i++) {
+      const post = new THREE.BoxGeometry(0.1, 1.1, 0.1);
+      post.translate(w > d ? x - w / 2 + i * 4 : x, 0.8, d > w ? z - d / 2 + i * 4 : z);
+      edgeGeos.push(post);
+    }
+  }
+  group.add(new THREE.Mesh(mergeGeometries(edgeGeos), new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 0.8 })));
+  // Outer ground beyond the edge: a grassy embankment so the far buildings sit on something.
+  const outer = new THREE.Mesh(new THREE.RingGeometry(edge * 1.35, 2600, 48), new THREE.MeshStandardMaterial({ color: 0x5a6a3a, roughness: 1 }));
+  outer.rotation.x = -Math.PI / 2;
+  outer.position.y = 0.02;
+  group.add(outer);
 
   scene.add(group);
   let trainDir = 1;

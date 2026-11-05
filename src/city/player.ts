@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Box2 } from './world';
+import { CITY_HALF, type Box2 } from './world';
 import type { Car } from './vehicle';
 import { buildHuman, OUTFITS, type HumanRig } from './human';
 
@@ -64,7 +64,7 @@ export class Player {
         this.pos.z += (dz / d) * (min - d);
       }
     }
-    const lim = 335;
+    const lim = CITY_HALF + 8;
     this.pos.x = THREE.MathUtils.clamp(this.pos.x, -lim, lim);
     this.pos.z = THREE.MathUtils.clamp(this.pos.z, -lim, lim);
     this.rig.animate(t, this.vel.length(), dt);

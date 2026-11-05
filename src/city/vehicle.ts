@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Box2 } from './world';
-import { radialSpriteTexture } from './world';
+import { radialSpriteTexture, CITY_HALF } from './world';
 
 export interface CarInput {
   throttle: number;
@@ -40,6 +40,7 @@ export class Car {
   private roll = 0;
   private pitch = 0;
   private glows: THREE.Sprite[] = [];
+  driver: THREE.Group;
 
   constructor(color: number, withShadowLights = false, realLights = true, kind: CarKind = 'sedan') {
     this.color = color;
@@ -154,6 +155,22 @@ export class Car {
       b.add(sl, sl.target);
       this.headlights.push(sl);
     }
+    // Driver: head and shoulders behind the wheel, visible through the glass.
+    this.driver = new THREE.Group();
+    const skinM = new THREE.MeshStandardMaterial({ color: [0xe3b08a, 0xc98a5a, 0xa8714c, 0xf1c6a7][Math.abs(color) % 4], roughness: 0.6 });
+    const shirtM = new THREE.MeshStandardMaterial({ color: [0x2a2a2a, 0x9a9a9a, 0x3a5a8a, 0x7a2e2e][Math.abs(color >> 4) % 4], roughness: 0.8 });
+    const torso = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.5, 0.26, 2, 0.06), shirtM);
+    torso.position.set(-0.38, 0.42 + P.lowH + 0.2, P.cabinZ + 0.1);
+    const head = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.24, 0.22, 2, 0.06), skinM);
+    head.position.set(-0.38, torso.position.y + 0.42, P.cabinZ + 0.1);
+    const hair = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.09, 0.23, 2, 0.04), new THREE.MeshStandardMaterial({ color: 0x1a1016, roughness: 0.9 }));
+    hair.position.set(-0.38, head.position.y + 0.12, P.cabinZ + 0.1);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16), dark);
+    wheel.position.set(-0.38, 0.42 + P.lowH + 0.3, P.cabinZ + 0.75);
+    wheel.rotation.x = -0.9;
+    this.driver.add(torso, head, hair, wheel);
+    this.driver.visible = false;
+    b.add(this.driver);
     this.mesh.add(b);
     // Wheels.
     const tyre = new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 0.9 });
@@ -287,14 +304,17 @@ export class Car {
         }
       }
     }
-    const lim = 330;
+    // The city ends at the ring road; a kerb keeps everyone inside.
+    const lim = CITY_HALF + 6;
     if (Math.abs(this.pos.x) > lim) {
       this.pos.x = Math.sign(this.pos.x) * lim;
       this.vel.x *= -0.3;
+      this.bump = Math.min(1, this.bump + 0.3);
     }
     if (Math.abs(this.pos.z) > lim) {
       this.pos.z = Math.sign(this.pos.z) * lim;
       this.vel.z *= -0.3;
+      this.bump = Math.min(1, this.bump + 0.3);
     }
     const targetRoll = -nvR * 0.012 - this.steer * nvF * 0.004;
     const targetPitch = -accel * 0.006;
