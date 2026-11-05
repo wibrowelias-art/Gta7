@@ -36,5 +36,21 @@ test('NEON CITY: boots clean, walk to the car, drive, and a job starts', async (
   s = await page.evaluate(() => window.__neoncity.state());
   expect(s.mission).not.toBeNull();
   await expect(page.locator('.c-mission')).toBeVisible();
+  // Leave the car, grab a bike (not a theft), then surf the train and stand on the rooftop.
+  await page.keyboard.press('e');
+  await page.evaluate(() => window.__neoncity.advance(0.5));
+  await page.evaluate(() => { const a = window.__neoncity as any; const b = a.bikePos(); a.teleport(b.x + 0.5, b.z + 1.2); a.advance(0.3); });
+  await page.keyboard.press('e');
+  await page.evaluate(() => window.__neoncity.advance(0.3));
+  let st = await page.evaluate(() => (window.__neoncity as any).state());
+  expect(st.kind).toBe('bike');
+  expect(st.wanted).toBe(0);
+  await page.keyboard.press('e');
+  await page.evaluate(() => { const a = window.__neoncity as any; a.advance(0.5); const p = a.trainPos(); a.teleport(p.x + 20, p.z, 13.7); a.advance(2); });
+  st = await page.evaluate(() => (window.__neoncity as any).state());
+  expect(st.onTrain).toBe(true);
+  await page.evaluate(() => { const a = window.__neoncity as any; const r = a.rooftop(); a.teleport(r.x, r.z + 2, r.y); a.advance(1.5); });
+  st = await page.evaluate(() => (window.__neoncity as any).state());
+  expect(st.y).toBeGreaterThan(10);
   expect(errors, errors.join('\n')).toEqual([]);
 });

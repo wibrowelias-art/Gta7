@@ -22,9 +22,26 @@ export interface StreetLamp {
   x: number;
   z: number;
 }
+/** A flat walkable surface above the ground. Ramps interpolate height along one axis. */
+export interface Platform extends Box2 {
+  y: number;
+  /** For ramps: height at min/max of the ramp axis. */
+  ramp?: { axis: 'x' | 'z'; y0: number; y1: number };
+  /** Walls (knee-high rails) that stop the player at the platform edge. */
+  fenced?: boolean;
+}
+
 export interface World {
   group: THREE.Group;
   solids: Box2[];
+  platforms: Platform[];
+  /** The train: position is updated every frame; the roof is a moving platform. */
+  train: THREE.Group;
+  trainVel: THREE.Vector3;
+  trainLen: number;
+  /** Walkable height at a point (0 on the street). */
+  heightAt(x: number, z: number, nearY: number): number;
+  rooftopSpot: THREE.Vector3 | null;
   lamps: StreetLamp[];
   roadsZ: number[];
   roadsX: number[];
@@ -82,6 +99,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const rng = new Rng(seed);
   const group = new THREE.Group();
   const solids: Box2[] = [];
+  const platforms: Platform[] = [];
   const lamps: StreetLamp[] = [];
   const neon: World['neon'] = [];
   const roadsZ: number[] = [];
@@ -150,6 +168,8 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const lampHeadGeos: THREE.BufferGeometry[] = [];
   const hedgeGeos: THREE.BufferGeometry[] = [];
   const woodGeos: THREE.BufferGeometry[] = [];
+  const roofTops: { x: number; z: number; minX: number; maxX: number; minZ: number; maxZ: number; y: number }[] = [];
+  let rooftopSpot: THREE.Vector3 | null = null;
   const signGeos: THREE.BufferGeometry[] = [];
   const awningGeos: THREE.BufferGeometry[] = [];
   const facadeStyles: Record<District, FacadeStyle[]> = { oldtown: ['plaster', 'plaster', 'brick'], modern: ['glass', 'concrete', 'glass'], industrial: ['industrial', 'brick'], residential: ['plaster', 'concrete', 'brick'], plaza: ['plaster'] };
@@ -316,7 +336,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         const cornice = new THREE.BoxGeometry(w + 0.8, 0.6, d + 0.8);
         cornice.translate(lot.x, hgt + 0.3, lot.z);
         trimGeos.push(cornice);
-        if (district === 'oldtown' || (district === 'residential' && rng.next() > 0.4)) {
+        if ((district === 'oldtown' || (district === 'residential' && rng.next() > 0.4)) && !(bx === 2 && bz === 3)) {
           // Pitched roof: triangular prism along the longer axis.
           const alongX = w >= d;
           const span = alongX ? d : w;
@@ -336,6 +356,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
             darkGeos.push(ch);
           }
         } else {
+          roofTops.push({ x: lot.x, z: lot.z, minX: lot.x - w / 2, maxX: lot.x + w / 2, minZ: lot.z - d / 2, maxZ: lot.z + d / 2, y: hgt + 0.3 });
           const par = new THREE.BoxGeometry(w + 0.2, 1.1, d + 0.2);
           par.translate(lot.x, hgt + 0.9, lot.z);
           roofGeos.push(par);
@@ -559,6 +580,92 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   train.position.set(-CITY_HALF - 120, 0, viaZ);
   group.add(train);
   for (let x = -CITY_HALF; x < CITY_HALF; x += 9) solids.push({ minX: x - 1.1, maxX: x + 1.1, minZ: viaZ - 2.25, maxZ: viaZ + 2.25 });
+  // The deck is walkable; a staircase climbs to it from the sidewalk by the third avenue.
+  platforms.push({ minX: -CITY_HALF - 200, maxX: CITY_HALF + 200, minZ: viaZ - 2.5, maxZ: viaZ + 2.5, y: 9.9, fenced: true });
+  const stairX = roadsX[3] + ROAD / 2 + 2;
+  const stairMat = new THREE.MeshStandardMaterial({ color: 0x6a6460, roughness: 0.85 });
+  const stairGeos: THREE.BufferGeometry[] = [];
+  const stairLen = 22;
+  const steps = 32;
+  for (let i = 0; i < steps; i++) {
+    const s = new THREE.BoxGeometry(2.4, 0.32, stairLen / steps + 0.05);
+    s.translate(stairX, 0.3 + (i + 0.5) * (9.6 / steps), viaZ + 2.5 + stairLen - (i + 0.5) * (stairLen / steps));
+    stairGeos.push(s);
+  }
+  // Landing and handrails.
+  const landing = new THREE.BoxGeometry(2.4, 0.32, 2.6);
+  landing.translate(stairX, 9.75, viaZ + 1.3);
+  stairGeos.push(landing);
+  for (const sx of [-1.25, 1.25]) {
+    const railS = new THREE.BoxGeometry(0.08, 1.0, stairLen + 2.6);
+    railS.translate(stairX + sx, 5.4, viaZ + 2.5 + stairLen / 2 - 0.1);
+    railS.rotateX(0);
+    stairGeos.push(railS);
+  }
+  const stairs = new THREE.Mesh(mergeGeometries(stairGeos), stairMat);
+  stairs.castShadow = stairs.receiveShadow = true;
+  group.add(stairs);
+  platforms.push({ minX: stairX - 1.2, maxX: stairX + 1.2, minZ: viaZ + 2.5, maxZ: viaZ + 2.5 + stairLen, y: 9.9, ramp: { axis: 'z', y0: 9.9, y1: 0 }, fenced: true });
+  // A gap in the deck rail at the stairs so you can step on.
+  solids.push({ minX: stairX - 1.4, maxX: stairX + 1.4, minZ: viaZ + 2.3, maxZ: viaZ + 2.7 });
+
+  /* ---------------- climbable rooftop: a fire escape on the block west of the plaza ---------------- */
+  {
+    const bx = 2;
+    const bz = 3;
+    const cx = -CITY_HALF + bx * CELL + CELL / 2;
+    const cz = -CITY_HALF + bz * CELL + CELL / 2;
+    const roofInfo = roofTops.find((r) => Math.abs(r.x - cx) < CELL / 2 && Math.abs(r.z - cz) < CELL / 2);
+    if (roofInfo) {
+      const ex = roofInfo.maxX + 0.9;
+      const top = roofInfo.y;
+      const flights = Math.ceil(top / 3.2);
+      const feGeos: THREE.BufferGeometry[] = [];
+      const runZ = 6;
+      for (let f = 0; f < flights; f++) {
+        const y0 = f * (top / flights);
+        const y1 = (f + 1) * (top / flights);
+        const dir = f % 2 === 0 ? 1 : -1;
+        const z0 = roofInfo.z - (dir * runZ) / 2;
+        const n = 8;
+        for (let i = 0; i < n; i++) {
+          const s = new THREE.BoxGeometry(1.4, 0.12, runZ / n);
+          s.translate(ex, y0 + ((i + 0.5) * (y1 - y0)) / n, z0 + dir * ((i + 0.5) * runZ) / n);
+          feGeos.push(s);
+        }
+        platforms.push({ minX: ex - 0.7, maxX: ex + 0.7, minZ: Math.min(z0, z0 + dir * runZ), maxZ: Math.max(z0, z0 + dir * runZ), y: y1, ramp: { axis: 'z', y0: dir > 0 ? y0 : y1, y1: dir > 0 ? y1 : y0 }, fenced: true });
+        // Landing at the top of each flight.
+        const land = new THREE.BoxGeometry(1.4, 0.12, 1.6);
+        land.translate(ex, y1, z0 + dir * (runZ + 0.8));
+        feGeos.push(land);
+        platforms.push({ minX: ex - 0.7, maxX: ex + 0.7, minZ: z0 + dir * runZ - 0.8 + (dir > 0 ? 0 : 0), maxZ: z0 + dir * runZ + 0.8, y: y1, fenced: true });
+        const railF = new THREE.BoxGeometry(0.06, 1.0, runZ + 1.6);
+        railF.translate(ex + 0.7, (y0 + y1) / 2 + 0.6, roofInfo.z + dir * 0.8);
+        feGeos.push(railF);
+      }
+      const fe = new THREE.Mesh(mergeGeometries(feGeos), new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6, metalness: 0.6 }));
+      fe.castShadow = true;
+      group.add(fe);
+      // The roof itself: walkable, parapet keeps you from falling (fenced).
+      platforms.push({ minX: roofInfo.minX, maxX: roofInfo.maxX + 1.6, minZ: roofInfo.minZ, maxZ: roofInfo.maxZ, y: top, fenced: true });
+      // A rooftop table and chairs for the sunset.
+      const tbl = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.9), new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 }));
+      tbl.position.set(roofInfo.x, top + 0.75, roofInfo.z);
+      group.add(tbl);
+      for (const dz of [-0.9, 0.9]) {
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), new THREE.MeshStandardMaterial({ color: 0x6a4a30, roughness: 0.9 }));
+        ch.position.set(roofInfo.x, top + 0.45, roofInfo.z + dz);
+        group.add(ch);
+      }
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x7a4a3a }));
+      pot.position.set(roofInfo.x + 1.2, top + 0.2, roofInfo.z - 1.2);
+      group.add(pot);
+      const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshStandardMaterial({ color: 0x4f7a3a, flatShading: true }));
+      plant.position.set(roofInfo.x + 1.2, top + 0.7, roofInfo.z - 1.2);
+      group.add(plant);
+      rooftopSpot = new THREE.Vector3(roofInfo.x, top, roofInfo.z);
+    }
+  }
 
   /* ---------------- landmarks and horizon ---------------- */
   const tower = new THREE.Group();
@@ -631,17 +738,59 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
 
   scene.add(group);
   let trainDir = 1;
+  const trainVel = new THREE.Vector3();
+  const heightAt = (x: number, z: number, nearY: number): number => {
+    let best = 0;
+    for (const p of platforms) {
+      if (x < p.minX || x > p.maxX || z < p.minZ || z > p.maxZ) continue;
+      let y = p.y;
+      if (p.ramp) {
+        const k = p.ramp.axis === 'x' ? (x - p.minX) / (p.maxX - p.minX) : (z - p.minZ) / (p.maxZ - p.minZ);
+        y = p.ramp.y0 + (p.ramp.y1 - p.ramp.y0) * k;
+      }
+      // Only surfaces you could plausibly be standing on (not far above the player's head).
+      if (y <= nearY + 1.2 && y > best) best = y;
+    }
+    return best;
+  };
   return {
     group,
     solids,
+    platforms,
+    train,
+    trainVel,
+    trainLen: 4 * 16.6,
+    heightAt,
+    rooftopSpot,
     lamps,
     roadsZ,
     roadsX,
     neon,
     update(_t, dt) {
-      train.position.x += trainDir * 22 * dt;
-      if (train.position.x > CITY_HALF + 160) trainDir = -1;
-      if (train.position.x < -CITY_HALF - 220) trainDir = 1;
+      // The train slows into the station by the stairs, waits, then pulls away.
+      const stationX = stairX - 4 * 16.6 * 0.5;
+      const dToStation = Math.abs(train.position.x - stationX);
+      let speed = 22;
+      if (dToStation < 40 && !(train as any).__left) speed = Math.max(2, (dToStation / 40) * 22);
+      if (dToStation < 1.2 && !(train as any).__left) {
+        (train as any).__wait = ((train as any).__wait ?? 0) + dt;
+        speed = 0;
+        if ((train as any).__wait > 8) {
+          (train as any).__left = true;
+          (train as any).__wait = 0;
+        }
+      }
+      const dx = trainDir * speed * dt;
+      train.position.x += dx;
+      trainVel.set(dt > 0 ? dx / dt : 0, 0, 0);
+      if (train.position.x > CITY_HALF + 160) {
+        trainDir = -1;
+        (train as any).__left = false;
+      }
+      if (train.position.x < -CITY_HALF - 220) {
+        trainDir = 1;
+        (train as any).__left = false;
+      }
     },
     setNight(n) {
       for (const m of windowMats) m.emissiveIntensity = n * 1.2;

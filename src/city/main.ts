@@ -66,6 +66,13 @@ async function boot(): Promise<void> {
   player.pos.set(-CELL * 0.5 - 4, 0, spawnZ + 7.5);
   player.heading = Math.PI;
 
+  const bikes: Car[] = [];
+  for (let i = 0; i < 3; i++) {
+    const bk = new Car(0xd9d9d9, false, false, 'bike');
+    bk.place(-CELL * 0.5 - 6 - i * 1.2, spawnZ + 12, Math.PI / 2);
+    scene.add(bk.mesh);
+    bikes.push(bk);
+  }
   const traffic = new Traffic(scene, world, tier === 'high' ? 26 : tier === 'balanced' ? 18 : 10, tier === 'battery' ? 24 : 48);
   const missions = new Missions(scene);
   const input = new Input();
@@ -120,7 +127,7 @@ async function boot(): Promise<void> {
     started = true;
     intro.classList.add('hidden');
     audio.resume();
-    hud.prompt('Walk to the silver car and press E (or ENTER) to get in');
+    hud.prompt('Walk to the silver car and press E to get in. Stairs by the viaduct lead up to the train.');
     setTimeout(() => hud.prompt(null), 5000);
   };
   playBtn.addEventListener('click', start);
@@ -159,7 +166,7 @@ async function boot(): Promise<void> {
   const tick = (dt: number) => {
     t += dt;
     const inp = input.poll();
-    const allCars = [car, ...traffic.cars];
+    const allCars = [car, ...bikes, ...traffic.cars];
     let pc = playerCar;
 
     if (started) {
@@ -170,6 +177,9 @@ async function boot(): Promise<void> {
         if (player.inCar) {
           player.inCar = null;
           pc.driver.visible = false;
+          pc.doorTarget = 1;
+          const closing = pc;
+          setTimeout(() => (closing.doorTarget = 0), 1200);
           const side = new THREE.Vector3(pc.forward.z, 0, -pc.forward.x);
           player.pos.copy(pc.pos).addScaledVector(side, -2.2);
           if (world.solids.some((b) => player.pos.x > b.minX && player.pos.x < b.maxX && player.pos.z > b.minZ && player.pos.z < b.maxZ)) player.pos.copy(pc.pos).addScaledVector(side, 2.2);
@@ -178,10 +188,10 @@ async function boot(): Promise<void> {
           pc.input = { throttle: 0, brake: 0, steer: 0, handbrake: true };
           hud.prompt(null);
         } else {
-          const own = player.pos.distanceTo(car.pos) < 6 ? car : null;
-          const target = own ?? traffic.nearestCar(player.pos, 4.5, null);
+          const own = player.pos.distanceTo(car.pos) < 6 ? car : bikes.find((b) => player.pos.distanceTo(b.pos) < 3.5) ?? null;
+          const target = player.pos.y > 1.5 ? null : own ?? traffic.nearestCar(player.pos, 4.5, null);
           if (target) {
-            if (target !== car) {
+            if (target !== car && !bikes.includes(target)) {
               traffic.release(target);
               target.ai = false;
               (target as any).__maxOverride = undefined;
@@ -193,6 +203,8 @@ async function boot(): Promise<void> {
             pc = target;
             player.inCar = target;
             target.driver.visible = true;
+            target.doorTarget = 1;
+            setTimeout(() => (target.doorTarget = 0), 700);
             hud.prompt(null);
           }
         }
@@ -210,14 +222,16 @@ async function boot(): Promise<void> {
       } else {
         const near = traffic.nearestCar(player.pos, 4.5, null);
         const ownNear = player.pos.distanceTo(car.pos) < 6;
-        hud.prompt(ownNear ? (input.touchUsed ? 'Tap ENTER to get in' : 'Press E to get in') : near ? (input.touchUsed ? 'Tap ENTER to take this car' : 'Press E to take this car') : null);
+        const bikeNear = bikes.some((b) => player.pos.distanceTo(b.pos) < 3.5);
+        const act = input.touchUsed ? 'Tap ENTER' : 'Press E';
+        hud.prompt(player.onTrain ? 'Surfing the train. Jump off anywhere.' : player.pos.y > 1.5 ? null : ownNear ? `${act} to get in` : bikeNear ? `${act} to grab the bike` : near ? `${act} to take this car` : null);
       }
       // Cars the player is not driving idle with the parking brake on.
       for (const c of allCars) if (c !== pc && !c.ai && !traffic.police.some((p) => p.car === c)) {
         c.input = { throttle: 0, brake: 0, steer: 0, handbrake: true };
         c.update(dt, world.solids, allCars);
       }
-      player.update(dt, inp.x, inp.y, inp.run, camYaw, world.solids, allCars, t);
+      player.update(dt, inp.x, inp.y, inp.run, camYaw, world.solids, allCars, t, world);
       const chase = wanted > 0 ? (player.inCar ? pc.pos : player.pos) : null;
       traffic.update(dt, player.inCar ? pc : null, allCars, world.solids, t, chase);
       missions.update(dt, player.inCar ? pc.pos : player.pos, t, !!player.inCar);
@@ -312,7 +326,8 @@ async function boot(): Promise<void> {
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       camYaw += dy * Math.min(1, dt * (player.vel.length() > 0.5 ? 1.8 : 0));
       const back = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
-      const target = focus.clone().addScaledVector(back, -5.2).add(new THREE.Vector3(0, 2.6, 0));
+      const high = player.pos.y > 2 ? 1 : 0;
+      const target = focus.clone().addScaledVector(back, -(5.2 + high * 2.5)).add(new THREE.Vector3(0, 2.6 + high * 1.2, 0));
       camPos.lerp(target, Math.min(1, dt * 4));
       camLook.lerp(focus.clone().add(new THREE.Vector3(0, 1.4, 0)).addScaledVector(back, 2), Math.min(1, dt * 6));
       camera.fov += (62 - camera.fov) * Math.min(1, dt * 3);
@@ -322,7 +337,7 @@ async function boot(): Promise<void> {
     const inside = (x: number, z: number) => world.solids.some((b) => b.maxX - b.minX > 3 && x > b.minX - 0.4 && x < b.maxX + 0.4 && z > b.minZ - 0.4 && z < b.maxZ + 0.4);
     const camFinal = camPos.clone();
     if (camMode !== 2 || !player.inCar) {
-      for (let k = 0; k < 10 && inside(camFinal.x, camFinal.z); k++) camFinal.lerp(new THREE.Vector3(focus.x, camFinal.y, focus.z), 0.2);
+      if (player.inCar || player.pos.y < 2) for (let k = 0; k < 10 && inside(camFinal.x, camFinal.z); k++) camFinal.lerp(new THREE.Vector3(focus.x, camFinal.y, focus.z), 0.2);
     }
     camera.position.copy(camFinal);
     camera.lookAt(camLook);
@@ -385,10 +400,17 @@ async function boot(): Promise<void> {
       for (let i = 0; i < steps; i++) tick(1 / 60);
       post.render();
     },
+    teleport(x: number, z: number, y = 0) {
+      player.pos.set(x, y, z);
+      player.vy = 0;
+    },
+    rooftop: () => world.rooftopSpot,
+    trainPos: () => ({ x: world.train.position.x, z: world.train.position.z }),
+    bikePos: () => ({ x: bikes[0].pos.x, z: bikes[0].pos.z }),
     debugWanted(n: number) {
       wanted = n;
     },
-    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
+    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length, y: player.pos.y, onTrain: player.onTrain, kind: playerCar.kind, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
   };
 }
 

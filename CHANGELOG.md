@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — NEON CITY: train surfing, bike, car doors and interiors, rooftop
+
+- Walkable elevation: platforms, ramps and gravity. A staircase by the third avenue climbs to the rail viaduct; the train slows into the station, waits, and you can ride on its roof (surf pose, carried with the train, jump off anywhere).
+- A fire escape on the block west of the plaza leads to a rooftop with a table, chairs and a plant for the sunset view.
+- Bikes parked by the plaza: grab one with E (no wanted level), lean into corners, rider pedals with the wheels.
+- Cars have interiors (seats, dashboard, driver) and a driver's door that swings open when you get in or out.
+- Camera backs off and rises when you are above street level.
+
 ## 1.2.0 — NEON CITY: golden-hour look, carjacking and police
 
 Art direction moved from neon-night to a PS2-era open-world realism reference: golden-hour haze, warm plaster and brick blocks, long shadows, foggy horizons.

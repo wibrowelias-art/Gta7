@@ -10,7 +10,7 @@ export interface CarInput {
   handbrake: boolean;
 }
 
-export type CarKind = 'sedan' | 'hatch' | 'sports' | 'van' | 'taxi';
+export type CarKind = 'sedan' | 'hatch' | 'sports' | 'van' | 'taxi' | 'bike';
 export const CAR_COLORS = [0xd9d9d9, 0x2a2a2a, 0x8a1c1c, 0x1f3a6a, 0xc9c0a8, 0x6a6a6a, 0x2f5a3a, 0xffffff, 0x4a3a7a, 0xb86a2a];
 
 const tmp = new THREE.Vector3();
@@ -40,7 +40,12 @@ export class Car {
   private roll = 0;
   private pitch = 0;
   private glows: THREE.Sprite[] = [];
-  driver: THREE.Group;
+  driver: THREE.Group = new THREE.Group();
+  door: THREE.Group | null = null;
+  doorOpen = 0; // 0 closed .. 1 open
+  doorTarget = 0;
+  pedals: THREE.Group | null = null;
+  riderLegs: THREE.Group[] = [];
 
   constructor(color: number, withShadowLights = false, realLights = true, kind: CarKind = 'sedan') {
     this.color = color;
@@ -58,6 +63,11 @@ export class Car {
       return m;
     };
     // Silhouette parameters per kind.
+    if (kind === 'bike') {
+      this.buildBike(paint, dark, chrome);
+      this.radius = 0.9;
+      return;
+    }
     const P = {
       sedan: { len: 4.6, wid: 1.86, lowH: 0.56, cabinZ: -0.2, cabinL: 2.1, cabinH: 0.55, hoodL: 1.5, trunkL: 1.1 },
       hatch: { len: 4.0, wid: 1.78, lowH: 0.56, cabinZ: -0.35, cabinL: 2.3, cabinH: 0.6, hoodL: 1.2, trunkL: 0.3 },
@@ -171,6 +181,31 @@ export class Car {
     this.driver.add(torso, head, hair, wheel);
     this.driver.visible = false;
     b.add(this.driver);
+    // Interior: two seats, dashboard, a steering column; visible through the glass.
+    const seatM = new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: 0.95 });
+    for (const sx of [-0.38, 0.38]) {
+      const seat = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.2, 0.55, 2, 0.05), seatM);
+      seat.position.set(sx, 0.42 + P.lowH + 0.08, P.cabinZ + 0.05);
+      const back = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.6, 0.14, 2, 0.05), seatM);
+      back.position.set(sx, 0.42 + P.lowH + 0.42, P.cabinZ - 0.25);
+      b.add(seat, back);
+    }
+    const dash = new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.3, 0.26, 0.5, 2, 0.05), new THREE.MeshStandardMaterial({ color: 0x1e1b1a, roughness: 0.7 }));
+    dash.position.set(0, 0.42 + P.lowH + 0.2, P.cabinZ + P.cabinL / 2 - 0.2);
+    b.add(dash);
+    // Driver door: hinged at the front edge, swings out when someone gets in or out.
+    this.door = new THREE.Group();
+    const doorL = P.cabinL * 0.55;
+    const hingeZ = P.cabinZ + P.cabinL / 2 - 0.05;
+    this.door.position.set(-(P.wid / 2), 0.42 + P.lowH / 2, hingeZ);
+    const panel = sh(new THREE.Mesh(new RoundedBoxGeometry(0.06, P.lowH - 0.04, doorL, 2, 0.02), paint));
+    panel.position.set(0, 0, -doorL / 2);
+    const win = new THREE.Mesh(new RoundedBoxGeometry(0.04, P.cabinH - 0.08, doorL - 0.2, 2, 0.02), glass);
+    win.position.set(0.02, P.lowH / 2 + P.cabinH / 2 + 0.02, -doorL / 2);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.16), chrome);
+    handle.position.set(-0.04, 0.1, -doorL * 0.75);
+    this.door.add(panel, win, handle);
+    b.add(this.door);
     this.mesh.add(b);
     // Wheels.
     const tyre = new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 0.9 });
@@ -191,6 +226,104 @@ export class Car {
       if (sz > 0) this.frontWheels.push(steerGroup);
     }
     this.radius = P.len * 0.32;
+  }
+
+  private buildBike(paint: THREE.Material, dark: THREE.Material, chrome: THREE.Material): void {
+    const b = this.body;
+    const sh = (m: THREE.Mesh) => {
+      m.castShadow = true;
+      return m;
+    };
+    const tube = (a: THREE.Vector3, c: THREE.Vector3, r = 0.03, mat: THREE.Material = paint) => {
+      const len = a.distanceTo(c);
+      const m = sh(new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), mat));
+      m.position.copy(a).lerp(c, 0.5);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), c.clone().sub(a).normalize());
+      b.add(m);
+    };
+    const rear = new THREE.Vector3(0, 0.35, -0.55);
+    const front = new THREE.Vector3(0, 0.35, 0.55);
+    const crank = new THREE.Vector3(0, 0.38, -0.05);
+    const seatP = new THREE.Vector3(0, 0.95, -0.25);
+    const head = new THREE.Vector3(0, 0.9, 0.45);
+    tube(crank, seatP);
+    tube(crank, head);
+    tube(seatP, head.clone().setY(0.95));
+    tube(rear, crank);
+    tube(rear, seatP);
+    tube(head, front, 0.025, chrome);
+    // Handlebar, seat, wheels, pedals.
+    const bar = sh(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 8), chrome));
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, 1.0, 0.45);
+    b.add(bar);
+    const seat = sh(new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.06, 0.28, 2, 0.02), dark));
+    seat.position.copy(seatP).add(new THREE.Vector3(0, 0.03, 0));
+    b.add(seat);
+    const tyre = new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 0.9 });
+    for (const [z, isFront] of [[-0.55, false], [0.55, true]] as const) {
+      const hub = new THREE.Group();
+      const w = sh(new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.035, 8, 20), tyre));
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.012, 6, 20), chrome);
+      hub.add(w, rim);
+      for (let i = 0; i < 8; i++) {
+        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.56, 4), chrome);
+        sp.rotation.z = (i / 8) * Math.PI;
+        hub.add(sp);
+      }
+      const sg = new THREE.Group();
+      sg.position.set(0, 0.35, z);
+      sg.add(hub);
+      this.mesh.add(sg);
+      this.wheels.push(hub);
+      if (isFront) this.frontWheels.push(sg);
+    }
+    this.pedals = new THREE.Group();
+    this.pedals.position.copy(crank);
+    for (const s of [1, -1]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.17, 0.03), dark);
+      arm.position.set(s * 0.08, s * 0.08, 0);
+      const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.06), dark);
+      pedal.position.set(s * 0.13, s * 0.16, 0);
+      this.pedals.add(arm, pedal);
+    }
+    b.add(this.pedals);
+    // Rider: seated human pieces (torso leaning forward, legs on the pedals), shown only when ridden.
+    this.driver = new THREE.Group();
+    const skin = new THREE.MeshStandardMaterial({ color: 0xe3b08a, roughness: 0.6 });
+    const shirt = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.8 });
+    const jeans = new THREE.MeshStandardMaterial({ color: 0x3a5a8a, roughness: 0.8 });
+    const torso = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.56, 0.26, 2, 0.06), shirt);
+    torso.position.set(0, 1.28, -0.05);
+    torso.rotation.x = 0.35;
+    const headM = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.24, 0.22, 2, 0.06), skin);
+    headM.position.set(0, 1.66, 0.1);
+    const hair = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.09, 0.23, 2, 0.04), new THREE.MeshStandardMaterial({ color: 0x1a1016 }));
+    hair.position.set(0, 1.78, 0.1);
+    this.driver.add(torso, headM, hair);
+    for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.55, 0.1, 2, 0.04), shirt);
+      arm.position.set(s * 0.26, 1.25, 0.22);
+      arm.rotation.x = -0.9;
+      this.driver.add(arm);
+      const leg = new THREE.Group();
+      leg.position.set(s * 0.14, 1.0, -0.2);
+      const thigh = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.42, 0.17, 2, 0.05), jeans);
+      thigh.position.y = -0.2;
+      const shin = new THREE.Group();
+      shin.position.y = -0.42;
+      const shinM = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.42, 0.15, 2, 0.04), jeans);
+      shinM.position.y = -0.2;
+      const shoe = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.08, 0.26, 2, 0.03), new THREE.MeshStandardMaterial({ color: 0xf2f2f2 }));
+      shoe.position.set(0, -0.42, 0.05);
+      shin.add(shinM, shoe);
+      leg.add(thigh, shin);
+      this.driver.add(leg);
+      this.riderLegs.push(leg, shin);
+    }
+    this.driver.visible = false;
+    b.add(this.driver);
+    this.mesh.add(b);
   }
 
   get forward(): THREE.Vector3 {
@@ -225,18 +358,18 @@ export class Car {
     const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
     const vF = this.vel.dot(fwd);
     const vR = this.vel.dot(right);
-    const maxSpeed = (this as any).__maxOverride ?? (this.ai ? 16 : this.kind === 'sports' ? 52 : this.kind === 'van' ? 36 : 44);
+    const maxSpeed = (this as any).__maxOverride ?? (this.ai ? 16 : this.kind === 'sports' ? 52 : this.kind === 'van' ? 36 : this.kind === 'bike' ? 11 : 44);
     let accel = 0;
-    if (inp.throttle > 0) accel += (vF < 0 ? 22 : (this.kind === 'sports' ? 19 : 15) * (1 - Math.max(0, vF) / maxSpeed) + 3) * inp.throttle;
+    if (inp.throttle > 0) accel += (vF < 0 ? 22 : (this.kind === 'sports' ? 19 : this.kind === 'bike' ? 6 : 15) * (1 - Math.max(0, vF) / maxSpeed) + 3) * inp.throttle;
     if (inp.brake > 0) accel -= vF > 0.5 ? 28 * inp.brake : 9 * inp.brake;
     if (inp.handbrake && inp.throttle === 0 && inp.brake === 0) accel -= THREE.MathUtils.clamp(vF / dt, -14, 14);
     accel -= vF * 0.08 + Math.sign(vF) * 0.6;
     let nvF = vF + accel * dt;
     if (Math.abs(nvF) < 0.05 && inp.throttle === 0 && inp.brake === 0) nvF = 0;
     nvF = THREE.MathUtils.clamp(nvF, -12, maxSpeed);
-    const steerTarget = inp.steer * (0.55 - 0.32 * Math.min(1, Math.abs(vF) / 30));
+    const steerTarget = inp.steer * (this.kind === 'bike' ? 0.7 - 0.3 * Math.min(1, Math.abs(vF) / 10) : 0.55 - 0.32 * Math.min(1, Math.abs(vF) / 30));
     this.steer += (steerTarget - this.steer) * Math.min(1, dt * 10);
-    const turnRate = (nvF / 3.2) * Math.tan(this.steer) * (inp.handbrake ? 1.35 : 1);
+    const turnRate = (nvF / (this.kind === 'bike' ? 1.1 : 3.2)) * Math.tan(this.steer) * (inp.handbrake ? 1.35 : 1);
     this.heading += turnRate * dt;
     const grip = inp.handbrake ? 1.4 : 7.5;
     let nvR = vR - vR * Math.min(1, grip * dt);
@@ -329,6 +462,24 @@ export class Car {
     const spin = (nvF * dt) / 0.36;
     for (const w of this.wheels) w.rotation.x += spin;
     for (const fw of this.frontWheels) fw.rotation.y = this.steer;
+    if (this.kind === 'bike') {
+      // Lean into corners; pedal with the wheels; rider legs follow the cranks.
+      this.body.rotation.z = -this.steer * 0.35 * Math.min(1, Math.abs(nvF) / 4) + this.roll;
+      this.mesh.children.forEach((c) => (c.rotation.z = this.body.rotation.z));
+      if (this.pedals) {
+        this.pedals.rotation.x += spin * 0.5;
+        const ph = this.pedals.rotation.x;
+        for (let i = 0; i < this.riderLegs.length; i += 2) {
+          const s = i === 0 ? 1 : -1;
+          this.riderLegs[i].rotation.x = -0.9 + Math.sin(ph) * s * 0.35;
+          this.riderLegs[i + 1].rotation.x = 1.3 + Math.cos(ph) * s * 0.3;
+        }
+      }
+    }
+    if (this.door) {
+      this.doorOpen += (this.doorTarget - this.doorOpen) * Math.min(1, dt * 7);
+      this.door.rotation.y = this.doorOpen * 1.0;
+    }
     this.tailMat.emissiveIntensity = inp.brake > 0 || inp.handbrake ? 3 : this.lightsOn ? 1.0 : 0.15;
   }
 }
