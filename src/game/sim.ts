@@ -315,6 +315,10 @@ export function step(s: GameState, hours: number): SimEffect[] {
         if (ev.kind === 'viral') fx.push({ type: 'viral' });
         if (ev.kind === 'outage') fx.push({ type: 'outage' });
         log(s, ev.title, 'event');
+        // Someone on the team texts about it.
+        const commenters = s.workers.filter((w) => w.id !== ev.workerId);
+        const lines = WORKER_LINES.eventComment[ev.kind];
+        if (commenters.length && lines && rng.chance(0.75)) pushChat(s, rng.pick(commenters), rng.pick(lines), fx);
       }
       s.eventTimer = rng.range(7, 15);
     }

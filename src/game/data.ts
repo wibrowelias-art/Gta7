@@ -201,5 +201,16 @@ export const WORKER_LINES = {
   sold: ['Just sold {n} {product}s. +${amount}!', 'Customer loved the {product}. +${amount} in the till.'],
   complaint: ['A client complained about delivery time. I smoothed it over.', 'Rough call with a client. We should look at shipping speed.'],
   raise: ['Can we talk about my salary? I think I have earned more.', 'Quick one: a raise would keep me here long term.'],
+  eventComment: {
+    viral: ['Boss, have you seen the numbers? We are everywhere right now!', 'My phone will not stop buzzing. We went viral!'],
+    outage: ['Store is down. Customers are messaging me. Please fix it fast.', 'Checkout is dead. Every minute hurts.'],
+    complaint: ['Rough call with a client today. Hope we do right by them.', 'That late order is on all of us. What do we do?'],
+    investor: ['Did you see the investor in the lobby? Fancy shoes.', 'Taking the money would be huge. Or risky. Your call.'],
+    supplier: ['Supplier deal looks good from where I sit. Stock is thin.', 'Bulk fabric at that price? I would take it.'],
+    raise: ['Heard someone asked for a raise. Fair, honestly.', 'If raises are on the table, I am listening.'],
+    press: ['Press shoot! Please let them film my desk.', 'A magazine feature would be wild. Say yes?'],
+    rent: ['Landlord again? That building owner never stops.', 'Rent going up would sting. Push back.'],
+    party: ['A night out would fix a lot of tired faces.', 'Party? I am already picking the playlist.'],
+  } as Record<string, string[]>,
   unknown: ['Not sure I follow. Ask me what I am working on, or tell me where to go.', 'Say that again? I can move rooms, or talk about work.'],
 };

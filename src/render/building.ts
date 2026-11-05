@@ -3,7 +3,7 @@ import { ROOMS } from '../game/data';
 import { ELEVATOR_X, SLOT_X } from '../game/sim';
 import type { GameState, Room, RoomType } from '../game/types';
 import type { Atmosphere } from './sky';
-import { bake, hash, lerp, lerpColor, radialTexture, shade, streakTexture, TextureBudget } from './textures';
+import { bake, gradientTexture, hash, lerp, lerpColor, radialTexture, shade, streakTexture, TextureBudget } from './textures';
 import type { TierConfig } from './quality';
 
 export const WB = 760; // building width in world units
@@ -239,7 +239,7 @@ export class RoomView {
   private base: Sprite;
   private reflection: Sprite | null = null;
   private cone: Sprite;
-  private shaft: Graphics;
+  private shafts: Sprite[] = [];
   private screens: Sprite[] = [];
   private leds: Sprite[] = [];
   private sign: Text;
@@ -265,20 +265,27 @@ export class RoomView {
       this.reflection = new Sprite(this.texture);
       this.reflection.width = w;
       this.reflection.height = h;
-      this.reflection.scale.y *= -0.35;
-      this.reflection.position.set(0, h + h * 0.35);
-      this.reflection.alpha = 0.16;
-      const mask = new Graphics().rect(0, h - 26, w, 26).fill(0xffffff);
+      // Mirror the lower part of the room into the glossy floor band.
+      const band = 26 * 1.28;
+      this.reflection.scale.y *= -0.4;
+      this.reflection.position.set(0, h - band + h * 0.4 - band * 0.4);
+      this.reflection.alpha = 0.22;
+      const mask = new Graphics().rect(0, h - band, w, band).fill(0xffffff);
       this.reflection.mask = mask;
       this.view.addChild(mask, this.reflection);
     }
     // Glass tint over windows.
     this.glassTint = new Graphics();
     this.view.addChild(this.glassTint);
-    // Volumetric shaft from the windows to the floor.
-    this.shaft = new Graphics();
-    this.shaft.blendMode = 'add';
-    this.view.addChild(this.shaft);
+    // Volumetric shafts from each window to the floor: gradient sprites that lean with the sun.
+    const shaftTex = gradientTexture([[0, 'rgba(255,255,255,0.85)'], [0.6, 'rgba(255,255,255,0.25)'], [1, 'rgba(255,255,255,0)']], 2, 128, 'shaft');
+    for (let i = 0; i < 3; i++) {
+      const sp = new Sprite(shaftTex);
+      sp.blendMode = 'add';
+      sp.anchor.set(0.5, 0);
+      this.shafts.push(sp);
+      this.view.addChild(sp);
+    }
     // Light cone.
     this.cone = new Sprite(radialTexture(256, 0, 1.4));
     this.cone.anchor.set(0.5, 0.2);
@@ -290,20 +297,21 @@ export class RoomView {
     // Dynamic screens and LEDs.
     this.buildDynamics(room.type, w, h);
     // Sign above the door frame.
-    this.sign = new Text({ text: ROOMS[room.type].name.toUpperCase(), style: { ...textStyle(18, ROOMS[room.type].light), dropShadow: { color: ROOMS[room.type].light, blur: 6, distance: 0, alpha: 0.8 } }, resolution: Math.min(2, dpr) });
-    this.sign.anchor.set(0.5, 1);
-    this.sign.position.set(w / 2, h + SLAB - 2);
+    // Neon sign on the back wall, just under the ceiling.
+    this.sign = new Text({ text: ROOMS[room.type].name.toUpperCase(), style: { ...textStyle(16, ROOMS[room.type].light), dropShadow: { color: ROOMS[room.type].light, blur: 6, distance: 0, alpha: 0.8 } }, resolution: Math.min(2, dpr) });
+    this.sign.anchor.set(0.5, 0);
+    this.sign.position.set(w / 2, 11);
     this.signGlow = new Sprite(radialTexture(128, 0, 2.5));
     this.signGlow.anchor.set(0.5);
     this.signGlow.blendMode = 'add';
     this.signGlow.tint = ROOMS[room.type].light;
-    this.signGlow.position.set(w / 2, h + SLAB - 12);
-    this.signGlow.scale.set(1.2, 0.3);
+    this.signGlow.position.set(w / 2, 20);
+    this.signGlow.scale.set(1.1, 0.28);
     this.flare = new Sprite(streakTexture());
     this.flare.anchor.set(0.5);
     this.flare.blendMode = 'add';
     this.flare.tint = ROOMS[room.type].light;
-    this.flare.position.set(w / 2, h + SLAB - 12);
+    this.flare.position.set(w / 2, 20);
     this.flare.scale.set(0.6, 0.3);
     this.view.addChild(this.signGlow, this.flare, this.sign);
   }
@@ -413,21 +421,26 @@ export class RoomView {
     this.base.tint = lerpColor(lerpColor(0x9a90a8, 0xffffff, 0.55 + lvl * 0.15), light, 0.08);
     this.cone.alpha = (0.18 + lvl * 0.06) * (0.7 + night * 0.5) + (hovered ? 0.12 : 0);
     this.cone.scale.x = (w / 180) * (1 + Math.sin(t * 0.9 + this.rect.x) * 0.01);
-    // Shaft: warm during the day, tracking the sun; faint at night from the city glow.
-    this.shaft.clear();
-    const sunShift = (atm.sunX - 0.5) * -90;
+    // Shafts: warm during the day, leaning with the sun; faint at night from the city glow.
     const S = 1.28;
     const pw = w * 0.2;
     const wy = 18 * S;
     const wh = (h / S) * 0.42 * S;
+    const lean = (atm.sunX - 0.5) * -0.5;
     for (let i = 0; i < 3; i++) {
+      const sp = this.shafts[i];
       const x = w * 0.12 + i * (pw + w * 0.1);
-      this.shaft.poly([x, wy, x + pw, wy, x + pw + sunShift * 0.5, h - 10, x + sunShift * 0.5 - 10, h - 10]).fill({ color: lerpColor(0xffd8b0, 0xff8a3d, atm.warmth), alpha: cfg.shafts ? (0.05 + atm.daylight * 0.08 + atm.warmth * 0.06) * (1 - atm.rain * 0.7) : 0 });
+      sp.position.set(x + pw / 2, wy + wh * 0.3);
+      sp.width = pw * 1.15;
+      sp.height = h - wy - wh * 0.3;
+      sp.skew.x = lean;
+      sp.tint = lerpColor(0xffd8b0, 0xff8a3d, atm.warmth);
+      sp.alpha = cfg.shafts ? (0.06 + atm.daylight * 0.16 + atm.warmth * 0.1) * (1 - atm.rain * 0.7) * (0.6 + 0.4 * Math.sin(t * 0.4 + i)) : 0;
     }
     this.glassTint.clear();
     for (let i = 0; i < 3; i++) {
       const x = w * 0.12 + i * (pw + w * 0.1);
-      this.glassTint.rect(x, wy, pw, wh).fill({ color: lerpColor(atm.skyHorizon, 0x3fd0ff, 0.3), alpha: 0.12 + atm.rain * 0.2 });
+      this.glassTint.rect(x, wy, pw, wh).fill({ color: lerpColor(atm.skyHorizon, 0x3fd0ff, 0.3), alpha: 0.22 + atm.rain * 0.2 });
     }
     // Screens cycle frames; LEDs blink.
     for (const s of this.screens) {

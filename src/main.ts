@@ -23,6 +23,11 @@ mountPanelHost(app, $('panels'));
 mountModals(app, $('modals'));
 mountTutorial(app, $('modals'));
 app.start();
+const splash = document.getElementById('splash');
+if (splash) {
+  splash.classList.add('hidden');
+  setTimeout(() => splash.remove(), 400);
+}
 
 // Stream in the heavy pieces after first paint.
 const sceneRoot = $('scene');
@@ -35,8 +40,7 @@ async function bootScene(): Promise<void> {
   const scene = await createScene(sceneRoot, app, tier);
   app.scene = scene;
   lite.classList.add('hidden');
-  if (app.isNew || app.state.company === '') app.on('named', () => scene.establishingShot());
-  else scene.establishingShot();
+  scene.establishingShot();
 }
 
 async function bootAudio(): Promise<void> {
@@ -53,10 +57,15 @@ async function bootAudio(): Promise<void> {
 }
 
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? (window as any).requestIdleCallback(fn, { timeout: 800 }) : setTimeout(fn, 60));
-idle(() => {
-  void bootScene().catch((err) => {
-    console.error('Scene failed to start', err);
-    app.emit('toast', { text: 'Graphics could not start on this device. The game still runs.', tone: 'bad' });
+const startHeavy = () =>
+  idle(() => {
+    void bootScene().catch((err) => {
+      console.error('Scene failed to start', err);
+      app.emit('toast', { text: 'Graphics could not start on this device. The game still runs.', tone: 'bad' });
+    });
+    void bootAudio().catch((err) => console.error('Audio failed to start', err));
   });
-  void bootAudio().catch((err) => console.error('Audio failed to start', err));
-});
+// First visit: the HUD and the lightweight CSS skyline paint instantly; the WebGL scene, filters and audio
+// stream in once the player names the company (their first tap). Returning players get the scene right away.
+if (app.state.company === '') app.on('named', startHeavy);
+else startHeavy();

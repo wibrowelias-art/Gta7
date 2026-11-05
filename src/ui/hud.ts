@@ -8,17 +8,17 @@ export function mountHud(app: App, root: HTMLElement): void {
   // Cash counter, top-right.
   const amount = h('div.amount.num', { text: fmtMoney(app.state.cash) });
   const sub = h('div.sub.display', { text: 'CASH' });
-  const cash = h('button.hud-cash', { 'aria-label': 'Cash. Open Treasury', on: { click: () => app.openPanel('treasury') } }, amount, sub);
+  const cash = h('button.hud-cash', { title: 'Open the Treasury', on: { click: () => app.openPanel('treasury') } }, amount, sub);
   const setCash = counter(amount, (n) => fmtMoney(n), app.state.cash);
   let lastCash = app.state.cash;
 
   // Top-left: day/time chip and speed.
   const dayEl = h('span.val.num', { text: `Day ${app.state.day}` });
   const timeEl = h('span.label.num', { text: fmtClock(app.state.clock) });
-  const dayChip = h('button.chip', { 'aria-label': 'Day and time. Open daily report', on: { click: () => app.emit('openReport') } }, icon('sun', 'tod'), dayEl, timeEl);
+  const dayChip = h('button.chip', { title: 'Open the daily report', on: { click: () => app.emit('openReport') } }, icon('sun', 'tod'), dayEl, timeEl);
   const speedLabel = h('span.val.num', { text: `${app.state.speed}×` });
   const speedChip = h('button.chip', {
-    'aria-label': 'Game speed',
+    title: 'Game speed',
     on: {
       click: () => {
         const order = [1, 2, 5] as const;
@@ -28,17 +28,17 @@ export function mountHud(app: App, root: HTMLElement): void {
         app.audio?.play('tap');
       },
     },
-  }, icon('fast'), speedLabel);
+  }, icon('fast'), speedLabel, h('span.sr-only', { text: 'speed' }));
   const topLeft = h('div.hud-top-left', {}, dayChip, speedChip);
 
   // Contextual prompt.
   const prompt = h('div.hud-prompt');
 
   // Dock.
-  const badgeChat = h('span.badge.hidden');
-  const badgeTeam = h('span.badge.hidden');
+  const badgeChat = h('span.badge.hidden', { 'aria-hidden': 'true' });
+  const badgeTeam = h('span.badge.hidden', { 'aria-hidden': 'true' });
   const dockBtn = (name: string, ic: string, label: string, badge?: HTMLElement) =>
-    h('button.dock-btn', { dataset: { panel: name }, 'aria-label': label, on: { click: () => app.openPanel(name as any) } }, icon(ic), h('span', { text: label }), badge);
+    h('button.dock-btn', { dataset: { panel: name }, on: { click: () => app.openPanel(name as any) } }, icon(ic), h('span', { text: label }), badge);
   const dock = h(
     'nav.hud-dock',
     { 'aria-label': 'Main menu' },
@@ -50,7 +50,7 @@ export function mountHud(app: App, root: HTMLElement): void {
 
   // Radar.
   const radarCanvas = document.createElement('canvas');
-  const radar = h('button.hud-radar', { 'aria-label': 'Radar. Tap to return to the building', on: { click: () => app.emit('radarTap') } }, radarCanvas);
+  const radar = h('button.hud-radar', { 'aria-label': 'Radar: return to the building', on: { click: () => app.emit('radarTap') } }, radarCanvas);
 
   root.append(topLeft, cash, prompt, dock, radar);
 
@@ -176,6 +176,6 @@ export function mountHud(app: App, root: HTMLElement): void {
       badgeTeam.textContent = String(unhappy);
       badgeTeam.classList.toggle('hidden', unhappy === 0);
     }
-    drawRadar();
+    if (app.scene) drawRadar();
   });
 }

@@ -83,7 +83,9 @@ export class App {
         this.saveTimer = 0;
         this.save();
       }
-      this.raf = requestAnimationFrame(loop);
+      // Nothing moves before the company is named and the scene exists: idle at 5 fps instead of 60.
+      if (s.company === '' && !this.scene) this.raf = window.setTimeout(() => requestAnimationFrame(loop), 200) as unknown as number;
+      else this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
     document.addEventListener('visibilitychange', () => {
@@ -97,6 +99,7 @@ export class App {
 
   stop(): void {
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.raf);
   }
 
   save(): void {
