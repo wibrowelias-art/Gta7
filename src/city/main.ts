@@ -26,7 +26,7 @@ async function boot(): Promise<void> {
   renderer.shadowMap.enabled = tier !== 'battery';
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 0.95;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.className = 'gl';
   gameRoot.appendChild(renderer.domElement);

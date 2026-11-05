@@ -413,7 +413,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
           group.add(sign);
           neon.push({ mesh: sign, phase: rng.next() * 10, base: 1 });
           // Glow light under the sign on the facade.
-          const glow = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending }));
+          const glow = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.05, depthWrite: false, blending: THREE.AdditiveBlending }));
           glow.position.copy(sign.position);
           glow.rotation.copy(sign.rotation);
           glow.translateZ(-0.1);
@@ -427,7 +427,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.12, d + 0.3), new THREE.MeshStandardMaterial({ color: trimColor, emissive: trimColor, emissiveIntensity: 2.2 }));
         trim.position.set(lot.x, 3.75, lot.z);
         group.add(trim);
-        const pool = new THREE.Mesh(new THREE.PlaneGeometry(w + 6, d + 6), new THREE.MeshBasicMaterial({ map: poolTex, color: trimColor, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+        const pool = new THREE.Mesh(new THREE.PlaneGeometry(w + 6, d + 6), new THREE.MeshBasicMaterial({ map: poolTex, color: trimColor, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false }));
         pool.rotation.x = -Math.PI / 2;
         pool.position.set(lot.x, 0.33, lot.z);
         group.add(pool);
