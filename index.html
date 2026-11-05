@@ -4,28 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0710" />
-    <meta name="description" content="NEON HQ: run a neon-lit startup tower in a sunset city. Hire, build, pay bonuses and grow." />
+    <meta name="description" content="NEON CITY: an open-world driving mini game in a rain-slick neon city. Deliver, race and cruise." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>NEON HQ</title>
+    <title>NEON CITY</title>
     <style>
-      /* Critical first paint: a dark sunset backdrop and the wordmark, before any script runs. */
-      html, body { margin: 0; height: 100%; background: #0a0710; }
-      #splash { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(120% 80% at 50% 100%, #2a1430 0%, #120a1d 45%, #0a0710 100%); font: 700 72px/1 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.04em; color: #ff3d8b; text-shadow: 0 0 28px rgba(255, 61, 139, 0.55); transition: opacity 300ms; }
-      #splash.hidden { opacity: 0; pointer-events: none; }
+      html, body { margin: 0; height: 100%; background: #0a0710; overflow: hidden; }
     </style>
   </head>
   <body>
-    <div id="splash" aria-hidden="true">NEON HQ</div>
-    <div id="app">
-      <div id="scene" aria-hidden="true"><div id="scene-lite"></div></div>
-      <div id="fx" aria-hidden="true"></div>
-      <div id="hud" role="region" aria-label="Game HUD"></div>
-      <div id="panels"></div>
-      <div id="toasts" role="status" aria-live="polite"></div>
-      <div id="modals"></div>
+    <div id="game"></div>
+    <div id="hud" role="region" aria-label="Game HUD"></div>
+    <div id="intro">
+      <h1>NEON CITY</h1>
+      <p>A rain-slick open city at night. Walk to the car, get in, and take jobs across town: deliveries, taxi runs and street races.</p>
+      <div class="loading-bar" id="loading"><i></i></div>
+      <button class="btn primary hidden" id="play">Start driving</button>
+      <p class="tiny">WASD or arrows · Space to drift · E to enter the car · touch controls on phones</p>
+      <p class="tiny">Also in this repo: <a href="/hq.html">NEON HQ</a>, the tower management game.</p>
     </div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/city/main.ts"></script>
   </body>
 </html>

@@ -1,6 +1,9 @@
-# NEON HQ
+# NEON CITY + NEON HQ
 
-Run a startup tower in a neon-lit sunset city. Hire workers, build and upgrade rooms, pay bonuses, answer events, call meetings and grow from $650 to a million.
+Two original games in one Vite project:
+
+- **NEON CITY** (`/`) — an open-world driving mini game. A rain-slick neon city at night: walk to your car, get in, and take jobs across town (deliveries, taxi runs, street races) while traffic and pedestrians go about their night. Three.js with bloom, film grade, speed blur, real headlights, shadows and wet-asphalt reflections. Keyboard (WASD / arrows, Space drift, E enter, H horn, C camera, R reset) and touch controls.
+- **NEON HQ** (`/hq.html`) — a startup-tower management game. Hire workers, build and upgrade rooms, pay bonuses, answer events, call meetings and grow from $650 to a million.
 
 ## Run it
 
@@ -25,6 +28,7 @@ The app is a static Vite build plus one serverless function (`api/chat.ts`) for 
 
 ## Layout
 
+- `src/city` — NEON CITY: world generation, vehicle physics, player, traffic, missions, HUD, post-processing, audio
 - `src/game` — deterministic simulation (economy, workers, events, milestones, chat, save)
 - `src/render` — PixiJS scene: sky, city, building, workers, camera, post-processing, quality tiers
 - `src/ui` — HUD, panels, modals, toasts, effects, tutorial

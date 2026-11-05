@@ -14,7 +14,7 @@ async function boot(page: Page, name = 'Sunset Labs'): Promise<void> {
     if ((m.type() === 'error' || m.type() === 'warning') && !m.text().includes('GL Driver Message')) errors.push(`${m.type()}: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  await page.goto('/');
+  await page.goto('/hq.html');
   await page.getByPlaceholder('Your company name').fill(name);
   await page.getByRole('button', { name: 'Open the doors' }).click();
   await page.waitForFunction(() => !!window.__neonhq?.scene, null, { timeout: 60_000 });

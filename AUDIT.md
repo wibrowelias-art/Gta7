@@ -54,3 +54,13 @@ Legend: `[x]` fixed in this pass · `[ ]` open
 - [ ] Denser room dressing at level 1 (whiteboards, cabinets, rugs) and clearer level 2/3 material changes.
 - [ ] Soft shadows under furniture and stronger floor reflections of workers.
 - [ ] Rain streaks on the window glass.
+
+## NEON CITY (first pass) — known rough edges
+- [x] AI cars carried two real SpotLights each (50+ per-pixel lights): removed; only the player's car has real headlights.
+- [x] A parked car crept backwards forever (brake-while-stopped meant reverse); the parking brake now holds.
+- [x] On-foot movement was inverted relative to the camera.
+- [x] The car's nose sank into buildings and dragged the camera inside walls; capsule collision + camera walk-back.
+- [ ] Car model is low-poly boxes; a proper mesh with bevels and interior would lift it further.
+- [ ] No day cycle yet (always night and rain); the HQ's atmosphere model could drive it.
+- [ ] Pedestrians have no reaction to the horn; traffic does not stop at the lights (lights are cosmetic).
+- [ ] Minimap has no building silhouettes yet.

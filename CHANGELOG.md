@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.0 — NEON CITY (first pass)
+
+An original open-world driving mini game added at `/` (NEON HQ moved to `/hq.html`).
+- Procedural 7×7-block night city: lit towers with window atlases, glass towers, neon shopfront trims and signs, billboards, street lamps with real light pools, traffic lights, parked cars, palms, a plaza fountain, a distant skyline ring, stars and moon.
+- Car with arcade physics (drift on the handbrake, body roll, wheel steer/spin, capsule collision that slides along walls), real headlight spotlights with shadows on High, tail lights that brighten on braking, underglow, drift smoke.
+- On-foot player with camera-relative movement; enter/leave the car; chase, far and hood cameras with speed-dependent FOV and radial speed blur; establishing orbit on start.
+- AI traffic that follows lanes and turns at intersections, yields to you, and pedestrians who walk the blocks and get knocked over.
+- Jobs: deliveries, taxi runs and four-checkpoint street races with timers, cash rewards and time bonuses; a beam marker and a rotating minimap.
+- Post stack: Unreal bloom, film grade (teal shadows / warm highlights), vignette, grain, chromatic aberration, SMAA on High. Quality tiers auto-detected (`?q=high|balanced|battery` to force).
+- Synthesised engine, tyre screech, horn, chimes and city hum.
+- Playwright smoke test drives the car deterministically through a `window.__neoncity.advance()` hook.
+
 ## 1.0.0 — Final polish pass
 
 The repository started empty, so this pass delivers NEON HQ as a complete, polished game and then audits it against the brief (see `AUDIT.md`).

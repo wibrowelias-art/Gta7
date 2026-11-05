@@ -5,10 +5,12 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     rollupOptions: {
+      input: { main: 'index.html', hq: 'hq.html' },
       output: {
         manualChunks(id: string) {
           if (id.includes('pixi-filters')) return 'pixi-filters';
           if (id.includes('pixi.js')) return 'pixi';
+          if (id.includes('node_modules/three')) return 'three';
         },
       },
     },
