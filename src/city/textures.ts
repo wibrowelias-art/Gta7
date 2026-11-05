@@ -42,8 +42,10 @@ const CONCRETE = ['#9a9590', '#8b8782', '#a5a09a', '#7f7b78'];
 /** A facade atlas: 4 columns × 4 floors of windows with frames, sills and a few lit interiors. */
 export function facadeTexture(style: FacadeStyle, seed: number): Facade {
   const rng = new Rng(seed);
-  const [c, g] = canvas(512, 512);
-  const [e, eg] = canvas(512, 512);
+  const [c, g] = canvas(256, 256);
+  const [e, eg] = canvas(256, 256);
+  g.scale(0.5, 0.5);
+  eg.scale(0.5, 0.5);
   eg.fillStyle = '#000';
   eg.fillRect(0, 0, 512, 512);
   let base = '#c9a27a';

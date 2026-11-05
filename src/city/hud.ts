@@ -50,7 +50,7 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
   const flash = $('.c-flash');
   const wanted = $('.c-wanted');
   const filterBtn = $('.c-filter');
-  const crispNow = localStorage.getItem('neoncity.filter') === 'crisp';
+  const crispNow = new URLSearchParams(location.search).get('filter') === 'crisp' || localStorage.getItem('neoncity.filter') === 'crisp';
   filterBtn.textContent = crispNow ? 'CRISP' : 'SOFT';
   filterBtn.addEventListener('click', () => {
     const next = filterBtn.textContent === 'SOFT' ? 'crisp' : 'soft';
