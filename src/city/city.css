@@ -274,3 +274,20 @@
 .c-star { color: rgba(255, 244, 236, 0.25); }
 .c-star.on { color: var(--gold); animation: starPop 300ms var(--ease-spring); }
 @keyframes starPop { from { transform: scale(1.6); } }
+
+.c-filter {
+  position: absolute;
+  top: calc(var(--safe-top) + 80px);
+  right: calc(var(--safe-right) + 12px);
+  pointer-events: auto;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+#hud.touch .c-filter { top: calc(var(--safe-top) + 150px); }

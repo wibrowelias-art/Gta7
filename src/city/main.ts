@@ -4,12 +4,13 @@ import '../styles/tokens.css';
 import '../styles/ui.css';
 import './city.css';
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { SkyDome } from './sky';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { buildWorld, CITY_HALF, CELL, LANE, radialSpriteTexture } from './world';
 import { Car } from './vehicle';
 import { Player } from './player';
 import { Traffic } from './traffic';
+import { Npcs } from './npc';
 import { Missions } from './missions';
 import { Input } from './input';
 import { mountHud } from './hud';
@@ -24,10 +25,10 @@ async function boot(): Promise<void> {
   const renderer = new THREE.WebGLRenderer({ antialias: tier !== 'high', powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier === 'high' ? 2 : tier === 'balanced' ? 1.5 : 1));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = tier !== 'battery';
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
+  renderer.shadowMap.enabled = false;
+  renderer.toneMapping = THREE.NoToneMapping;
+  // Texture filtering: Soft (linear) by default, Crisp (nearest) for a sharper PS2 feel. ?filter=crisp or the HUD toggle.
+  const crisp = new URLSearchParams(location.search).get('filter') === 'crisp' || localStorage.getItem('neoncity.filter') === 'crisp';
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.className = 'gl';
   gameRoot.appendChild(renderer.domElement);
@@ -35,16 +36,50 @@ async function boot(): Promise<void> {
   const scene = new THREE.Scene();
   const fog = new THREE.FogExp2(0xd9a070, 0.0022);
   scene.fog = fog;
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.3;
+  scene.environment = null;
 
   const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 5000);
-  const skyDome = new SkyDome(scene, tier !== 'battery', tier === 'high' ? 4096 : 2048);
+  const skyDome = new SkyDome(scene);
   const startHour = Number(new URLSearchParams(location.search).get('hour'));
   if (!Number.isNaN(startHour) && startHour > 0) skyDome.hour = startHour;
 
   const world = buildWorld(scene, 7, tier);
+  const applyFilter = (nearest: boolean) => {
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!m) return;
+      for (const mat of Array.isArray(m) ? m : [m]) {
+        for (const key of ['map', 'emissiveMap'] as const) {
+          const tex = (mat as any)[key] as THREE.Texture | null;
+          if (tex) {
+            tex.magFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
+            tex.minFilter = nearest ? THREE.NearestMipmapLinearFilter : THREE.LinearMipmapLinearFilter;
+            tex.needsUpdate = true;
+          }
+        }
+      }
+    });
+  };
+  applyFilter(crisp);
+  // Wet road: a planar mirror under a translucent asphalt plane, shown at dusk/night and in rain.
+  const ground = world.group.children.find((o) => (o as THREE.Mesh).geometry instanceof THREE.PlaneGeometry && (o as THREE.Mesh).material instanceof THREE.MeshLambertMaterial) as THREE.Mesh | undefined;
+  const groundMat = ground?.material as THREE.MeshLambertMaterial | undefined;
+  let mirror: Reflector | null = null;
+  if (tier !== 'battery') {
+    mirror = new Reflector(new THREE.PlaneGeometry(CITY_HALF * 2 + 40, CITY_HALF * 2 + 40), { textureWidth: 512, textureHeight: 512, color: 0x3a3a44, clipBias: 0.003, multisample: 0 });
+    mirror.rotation.x = -Math.PI / 2;
+    mirror.position.y = -0.02;
+    mirror.visible = false;
+    scene.add(mirror);
+    if (groundMat) {
+      groundMat.transparent = true;
+      groundMat.depthWrite = true;
+    }
+  }
+  (window as any).__setFilter = (mode: 'soft' | 'crisp') => {
+    localStorage.setItem('neoncity.filter', mode);
+    applyFilter(mode === 'crisp');
+  };
 
   // Street lamp pool: real point lights follow the nearest lamps.
   const lampPool: THREE.PointLight[] = [];
@@ -73,7 +108,8 @@ async function boot(): Promise<void> {
     scene.add(bk.mesh);
     bikes.push(bk);
   }
-  const traffic = new Traffic(scene, world, tier === 'high' ? 26 : tier === 'balanced' ? 18 : 10, tier === 'battery' ? 24 : 48);
+  const traffic = new Traffic(scene, world, tier === 'high' ? 34 : tier === 'balanced' ? 24 : 12);
+  const npcs = new Npcs(scene, tier === 'high' ? 110 : tier === 'balanced' ? 70 : 32, world.props.hangouts, world.props.seats);
   const missions = new Missions(scene);
   const input = new Input();
   const hud = mountHud(document.getElementById('hud')!, input);
@@ -127,7 +163,7 @@ async function boot(): Promise<void> {
     started = true;
     intro.classList.add('hidden');
     audio.resume();
-    hud.prompt('Walk to the silver car and press E to get in. Stairs by the viaduct lead up to the train.');
+    hud.prompt('E gets in cars. Space jumps, vaults low things and climbs ledges. Stairs by the viaduct lead to the train.');
     setTimeout(() => hud.prompt(null), 5000);
   };
   playBtn.addEventListener('click', start);
@@ -162,6 +198,7 @@ async function boot(): Promise<void> {
   let wantedCool = 0;
   let lastHits = 0;
   let lastRammed = 0;
+  let jumpHeld = false;
 
   const tick = (dt: number) => {
     t += dt;
@@ -203,6 +240,7 @@ async function boot(): Promise<void> {
             pc = target;
             player.inCar = target;
             target.driver.visible = true;
+            hud.toast(input.touchUsed ? 'GAS to drive · BRAKE reverses · JUMP is the handbrake · ENTER to get out' : 'W drives · S brakes/reverses · Space handbrake · E to get out', 'info');
             target.doorTarget = 1;
             setTimeout(() => (target.doorTarget = 0), 700);
             hud.prompt(null);
@@ -210,6 +248,8 @@ async function boot(): Promise<void> {
         }
       }
       if (inp.reset && player.inCar) pc.place(pc.pos.x, pc.pos.z, pc.heading);
+      if (!player.inCar && inp.handbrake && !jumpHeld) player.wantJump = true;
+      jumpHeld = inp.handbrake;
       if (player.inCar) {
         pc.input = { throttle: inp.throttle, brake: inp.brake, steer: inp.x, handbrake: inp.handbrake };
         pc.update(dt, world.solids, allCars);
@@ -224,7 +264,8 @@ async function boot(): Promise<void> {
         const ownNear = player.pos.distanceTo(car.pos) < 6;
         const bikeNear = bikes.some((b) => player.pos.distanceTo(b.pos) < 3.5);
         const act = input.touchUsed ? 'Tap ENTER' : 'Press E';
-        hud.prompt(player.onTrain ? 'Surfing the train. Jump off anywhere.' : player.pos.y > 1.5 ? null : ownNear ? `${act} to get in` : bikeNear ? `${act} to grab the bike` : near ? `${act} to take this car` : null);
+        const jumpKey = input.touchUsed ? 'JUMP' : 'Space';
+        hud.prompt(player.onTrain ? `Surfing the train · ${jumpKey} to jump off` : player.pos.y > 1.5 ? `On the roof · ${jumpKey} jumps` : ownNear ? `${act} to get in · ${jumpKey} to jump` : bikeNear ? `${act} to grab the bike` : near ? `${act} to take this car` : null);
       }
       // Cars the player is not driving idle with the parking brake on.
       for (const c of allCars) if (c !== pc && !c.ai && !traffic.police.some((p) => p.car === c)) {
@@ -234,10 +275,11 @@ async function boot(): Promise<void> {
       player.update(dt, inp.x, inp.y, inp.run, camYaw, world.solids, allCars, t, world);
       const chase = wanted > 0 ? (player.inCar ? pc.pos : player.pos) : null;
       traffic.update(dt, player.inCar ? pc : null, allCars, world.solids, t, chase);
+      npcs.update(dt, t, allCars, player.inCar ? pc.pos : player.pos, inp.horn && !!player.inCar, world.obstacles);
       missions.update(dt, player.inCar ? pc.pos : player.pos, t, !!player.inCar);
       // Wanted level: hitting pedestrians or ramming traffic raises it; it cools off when you behave.
-      if (traffic.hits > lastHits) {
-        lastHits = traffic.hits;
+      if (npcs.hits > lastHits) {
+        lastHits = npcs.hits;
         wantedHeat += 0.6;
       }
       if (traffic.rammed > lastRammed) {
@@ -361,6 +403,12 @@ async function boot(): Promise<void> {
     const near = [...world.lamps].sort((a, b) => (a.x - focus.x) ** 2 + (a.z - focus.z) ** 2 - ((b.x - focus.x) ** 2 + (b.z - focus.z) ** 2)).slice(0, lampPool.length);
     near.forEach((l, i) => lampPool[i].position.set(l.x, 6.3, l.z));
     rain.visible = nightK > 0.6;
+    // Wet look: fade the asphalt toward the mirror as night comes in (and keep it wet during rain).
+    const wet = Math.max(nightK * 0.8, rain.visible ? 1 : 0, atm.warmth * 0.25);
+    if (mirror && groundMat) {
+      mirror.visible = wet > 0.15;
+      groundMat.opacity = 1 - wet * 0.3;
+    }
     // Rain follows the camera.
     rain.position.set(camPos.x, 0, camPos.z);
     const rp = rainGeo.attributes.position as THREE.BufferAttribute;
@@ -405,12 +453,20 @@ async function boot(): Promise<void> {
       player.vy = 0;
     },
     rooftop: () => world.rooftopSpot,
+    setCam(yaw: number) {
+      camYaw = yaw;
+      player.heading = yaw;
+    },
+    missionTarget: () => (missions.target ? { x: missions.target.x, z: missions.target.z } : null),
+    teleportCar(x: number, z: number) {
+      playerCar.place(x, z, playerCar.heading);
+    },
     trainPos: () => ({ x: world.train.position.x, z: world.train.position.z }),
     bikePos: () => ({ x: bikes[0].pos.x, z: bikes[0].pos.z }),
     debugWanted(n: number) {
       wanted = n;
     },
-    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length, y: player.pos.y, onTrain: player.onTrain, kind: playerCar.kind, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
+    state: () => ({ inCar: !!player.inCar, kmh: playerCar.kmh, cash: missions.cash, mission: missions.current?.title ?? null, pos: [player.pos.x, player.pos.z], carPos: [playerCar.pos.x, playerCar.pos.z], completed: missions.completed, wanted, police: traffic.police.length, action: player.action, npcs: npcs.list.length, y: player.pos.y, onTrain: player.onTrain, kind: playerCar.kind, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }),
   };
 }
 

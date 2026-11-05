@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 declare global {
   interface Window {
-    __neoncity: { advance(s: number): void; start(): void; state(): { inCar: boolean; kmh: number; cash: number; mission: string | null; pos: number[]; carPos: number[]; completed: number } };
+    __neoncity: { advance(s: number): void; start(): void; state(): any };
   }
 }
 
@@ -36,9 +36,33 @@ test('NEON CITY: boots clean, walk to the car, drive, and a job starts', async (
   s = await page.evaluate(() => window.__neoncity.state());
   expect(s.mission).not.toBeNull();
   await expect(page.locator('.c-mission')).toBeVisible();
-  // Leave the car, grab a bike (not a theft), then surf the train and stand on the rooftop.
+  // Finishing a job pays out and the CASH HUD updates.
+  await page.keyboard.up('w');
+  await page.evaluate(() => {
+    const a = window.__neoncity as any;
+    let target = a.missionTarget();
+    for (let i = 0; i < 4 && target; i++) {
+      a.teleportCar(target.x, target.z);
+      a.advance(0.5);
+      target = a.missionTarget();
+    }
+  });
+  s = await page.evaluate(() => window.__neoncity.state());
+  expect(s.cash).toBeGreaterThan(0);
+  await expect(page.locator('.c-cash-v')).not.toHaveText('$0');
+  // Parkour: climb a shipping container in the industrial district.
   await page.keyboard.press('e');
-  await page.evaluate(() => window.__neoncity.advance(0.5));
+  await page.evaluate(() => { const a = window.__neoncity as any; a.advance(0.5); a.teleport(-285.2, 174, 0); a.setCam(Math.PI / 2); a.advance(0.2); });
+  await page.keyboard.down('w');
+  await page.evaluate(() => (window.__neoncity as any).advance(0.3));
+  await page.keyboard.down(' ');
+  await page.evaluate(() => (window.__neoncity as any).advance(0.1));
+  await page.keyboard.up(' ');
+  await page.evaluate(() => (window.__neoncity as any).advance(1.5));
+  await page.keyboard.up('w');
+  s = await page.evaluate(() => (window.__neoncity as any).state());
+  expect(s.y, 'should have climbed onto the container').toBeGreaterThan(2);
+  // Grab a bike (not a theft), then surf the train and stand on the rooftop.
   await page.evaluate(() => { const a = window.__neoncity as any; const b = a.bikePos(); a.teleport(b.x + 0.5, b.z + 1.2); a.advance(0.3); });
   await page.keyboard.press('e');
   await page.evaluate(() => window.__neoncity.advance(0.3));

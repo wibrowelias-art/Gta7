@@ -1,11 +1,8 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 
 const GradeShader = {
   uniforms: {
@@ -44,7 +41,7 @@ const GradeShader = {
       col += vec3(0.02, 0.05, 0.07) * smoothstep(0.35, 0.0, lum) * (1.0 - uWarm * 0.5);
       col *= mix(vec3(1.0), vec3(1.08, 0.96, 0.86), smoothstep(0.45, 1.0, lum) * (0.5 + uWarm));
       col = mix(col, col * vec3(1.06, 0.98, 0.9) + vec3(0.03, 0.01, 0.0), uWarm * 0.6);
-      col = (col - 0.5) * 1.08 + 0.5;
+      col = (col - 0.5) * 1.04 + 0.5;
       float vig = 1.0 - smoothstep(0.55, 1.3, r) * uVignette;
       col *= vig;
       col += (rnd(uv * uResolution) - 0.5) * uGrain;
@@ -59,41 +56,28 @@ export interface Post {
 }
 
 export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, tier: 'high' | 'balanced' | 'battery'): Post {
+  // Retro target: almost no post. A render pass and a mild grade (gentle vignette, warm tint at sunset). No bloom, blur, grain or AO.
   const size = renderer.getSize(new THREE.Vector2());
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  let gtao: GTAOPass | null = null;
-  if (tier === 'high') {
-    try {
-      gtao = new GTAOPass(scene, camera, size.x, size.y);
-      gtao.output = GTAOPass.OUTPUT.Default;
-      gtao.blendIntensity = 0.7;
-      gtao.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1, thickness: 1, distanceFallOff: 1, scale: 1.2, samples: 12, screenSpaceRadius: false });
-      composer.addPass(gtao);
-    } catch (err) {
-      console.warn('Ambient occlusion unavailable', err);
-      gtao = null;
-    }
-  }
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), tier === 'high' ? 0.9 : 0.65, tier === 'high' ? 0.6 : 0.4, 0.78);
-  if (tier !== 'battery') composer.addPass(bloom);
   const grade = new ShaderPass(GradeShader);
-  grade.uniforms.uGrain.value = tier === 'battery' ? 0.0 : 0.035;
-  grade.uniforms.uChroma.value = tier === 'high' ? 1.2 : 0.6;
+  grade.uniforms.uGrain.value = 0;
+  grade.uniforms.uChroma.value = 0;
+  grade.uniforms.uVignette.value = 0.22;
+  grade.uniforms.uResolution.value.set(size.x, size.y);
   composer.addPass(grade);
   composer.addPass(new OutputPass());
-  if (tier === 'high') composer.addPass(new SMAAPass(size.x, size.y));
+  void tier;
   return {
     render: () => composer.render(),
     resize(w, h) {
       composer.setSize(w, h);
-      gtao?.setSize(w, h);
       grade.uniforms.uResolution.value.set(w, h);
     },
-    update(t, speed01, warm = 0) {
+    update(t, _speed01, warm = 0) {
       grade.uniforms.uTime.value = t % 1000;
       grade.uniforms.uWarm.value = warm;
-      grade.uniforms.uSpeed.value = Math.max(0, speed01 - 0.45) * 1.5;
+      grade.uniforms.uSpeed.value = 0;
     },
   };
 }

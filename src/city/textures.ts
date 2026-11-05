@@ -34,8 +34,6 @@ export interface Facade {
   /** Metres covered by one texture repeat (x, y). */
   size: [number, number];
   color: number;
-  roughness: number;
-  metalness: number;
 }
 
 const WARM = ['#d9b98a', '#c9a27a', '#e3c9a3', '#d8a890', '#cdb7a0', '#b89a7c', '#e0cfb8', '#c7b8a2'];
@@ -151,9 +149,7 @@ export function facadeTexture(style: FacadeStyle, seed: number): Facade {
     emissive: finish(e),
     size: style === 'glass' ? [10, 14] : [12, 14],
     color: 0xffffff,
-    roughness: style === 'glass' ? 0.25 : 0.85,
-    metalness: style === 'glass' ? 0.5 : 0.0,
-  };
+    };
 }
 
 export function cobbleTexture(seed = 3): THREE.CanvasTexture {
@@ -317,4 +313,42 @@ export function trainTexture(): THREE.CanvasTexture {
 
 export function skinColors(): number[] {
   return [0xf1c6a7, 0xe3b08a, 0xc98a5a, 0xa8714c, 0x8d5a3c, 0x6b4229];
+}
+
+/** A poster / sign label: bold condensed text on a coloured card (or glowing, for neon). */
+export function neonLabelTexture(text: string, color: number, glow = true): THREE.CanvasTexture {
+  const [c, g] = canvas(512, 320);
+  const hex = `#${color.toString(16).padStart(6, '0')}`;
+  if (glow) g.clearRect(0, 0, 512, 320);
+  else {
+    g.fillStyle = '#efe6d6';
+    g.fillRect(0, 0, 512, 320);
+    g.fillStyle = hex;
+    g.fillRect(0, 0, 512, 60);
+    g.fillRect(0, 260, 512, 60);
+    g.fillStyle = '#1a1016';
+    g.font = '400 22px Inter, sans-serif';
+    g.textAlign = 'center';
+    g.fillText('SATURDAY · 21:00 · FREE ENTRY', 256, 300);
+  }
+  g.font = '700 84px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  if (glow) {
+    g.shadowColor = hex;
+    g.shadowBlur = 24;
+    g.lineWidth = 6;
+    g.strokeStyle = hex;
+    g.strokeText(text, 256, 160);
+    g.shadowBlur = 0;
+    g.fillStyle = '#fff4ec';
+  } else g.fillStyle = '#1a1016';
+  const words = text.split(' ');
+  if (words.length > 1 && !glow) {
+    g.fillText(words[0], 256, 120);
+    g.fillText(words.slice(1).join(' '), 256, 200);
+  } else g.fillText(text, 256, 160);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

@@ -1,7 +1,21 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
+/** mergeGeometries needs all-indexed or all-non-indexed input; normalise to non-indexed and drop unused attributes. */
+function mergeSafe(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const flat = geos.map((g) => {
+    const n = g.index ? g.toNonIndexed() : g;
+    for (const key of Object.keys(n.attributes)) if (!['position', 'normal', 'uv'].includes(key)) n.deleteAttribute(key);
+    if (!n.attributes.uv) n.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((n.attributes.position.count) * 2), 2));
+    return n;
+  });
+  const merged = mergeGeometries(flat, false);
+  if (!merged) throw new Error('mergeSafe: incompatible geometries');
+  return merged;
+}
 import { Rng } from '../game/rng';
 import { asphaltTexture, cobbleTexture, facadeTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
+import { buildProps, type PropsOut, type Solid3 } from './props';
 
 /** City layout constants (metres). */
 export const BLOCK = 64;
@@ -39,9 +53,16 @@ export interface World {
   train: THREE.Group;
   trainVel: THREE.Vector3;
   trainLen: number;
+  /** Roof collider of the train, recomputed every frame from the mesh. */
+  trainRoof: { minX: number; maxX: number; minZ: number; maxZ: number; y: number };
   /** Walkable height at a point (0 on the street). */
   heightAt(x: number, z: number, nearY: number): number;
   rooftopSpot: THREE.Vector3 | null;
+  /** Vaultable / climbable obstacles (with heights). */
+  props: PropsOut;
+  obstacles: Solid3[];
+  /** Traffic light state per intersection: true = x-axis traffic has green. */
+  lightXGreen(x: number, z: number, t: number): boolean;
   lamps: StreetLamp[];
   roadsZ: number[];
   roadsX: number[];
@@ -52,6 +73,15 @@ export interface World {
 }
 
 type District = 'oldtown' | 'modern' | 'industrial' | 'residential' | 'plaza';
+
+/** A soft dark disc under characters and cars: the classic blob shadow. */
+export function blobShadow(w: number, d: number, y = 0.02): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: radialSpriteTexture(), color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = y;
+  m.renderOrder = 1;
+  return m;
+}
 
 let poolTexCache: THREE.CanvasTexture | null = null;
 export function radialSpriteTexture(): THREE.CanvasTexture {
@@ -114,9 +144,9 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const asphalt = asphaltTexture();
   asphalt.map.repeat.set(70, 70);
   asphalt.rough.repeat.set(70, 70);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(extent * 2 + 1200, extent * 2 + 1200), new THREE.MeshStandardMaterial({ map: asphalt.map, roughnessMap: asphalt.rough, roughness: 1, metalness: 0.15, color: 0x8a8580 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(extent * 2 + 1200, extent * 2 + 1200), new THREE.MeshLambertMaterial({ map: asphalt.map, color: 0x8a8580 }));
   ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
+  ground.receiveShadow = false;
   group.add(ground);
 
   const markGeos: THREE.BufferGeometry[] = [];
@@ -148,8 +178,8 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     gx.translate(x + side * (ROAD / 2 - SIDEWALK - 1.8), 0.013, z + i * 1.2);
     markGeos.push(gz, gx);
   }
-  const marks = new THREE.Mesh(mergeGeometries(markGeos), new THREE.MeshStandardMaterial({ color: 0xd8d2c8, roughness: 0.7 }));
-  marks.receiveShadow = true;
+  const marks = new THREE.Mesh(mergeSafe(markGeos), new THREE.MeshLambertMaterial({ color: 0xd8d2c8}));
+  marks.receiveShadow = false;
   group.add(marks);
 
   const cobble = cobbleTexture();
@@ -168,6 +198,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const lampHeadGeos: THREE.BufferGeometry[] = [];
   const hedgeGeos: THREE.BufferGeometry[] = [];
   const woodGeos: THREE.BufferGeometry[] = [];
+  const blockInfo: { cx: number; cz: number; half: number; district: string }[] = [];
   const roofTops: { x: number; z: number; minX: number; maxX: number; minZ: number; maxZ: number; y: number }[] = [];
   let rooftopSpot: THREE.Vector3 | null = null;
   const signGeos: THREE.BufferGeometry[] = [];
@@ -195,6 +226,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       const cz = -CITY_HALF + bz * CELL + CELL / 2;
       const half = BLOCK / 2 + SIDEWALK;
       const district = districtOf(bx, bz);
+      blockInfo.push({ cx, cz, half, district });
       const sw = new THREE.BoxGeometry(half * 2, 0.3, half * 2);
       sw.translate(cx, 0.15, cz);
       sidewalkGeos.push(sw);
@@ -219,21 +251,21 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       }
       if (district === 'plaza') {
         // Cobbled plaza with a monument column, trees and benches.
-        const cob = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.34, half * 2), new THREE.MeshStandardMaterial({ map: cobble, roughness: 0.9 }));
+        const cob = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.34, half * 2), new THREE.MeshLambertMaterial({ map: cobble}));
         cob.position.set(cx, 0.17, cz);
-        cob.receiveShadow = true;
+        cob.receiveShadow = false;
         group.add(cob);
-        const stone = new THREE.MeshStandardMaterial({ color: 0xb9ab95, roughness: 0.85 });
-        const gold = new THREE.MeshStandardMaterial({ color: 0xd9a63a, roughness: 0.3, metalness: 0.9 });
+        const stone = new THREE.MeshLambertMaterial({ color: 0xb9ab95});
+        const gold = new THREE.MeshLambertMaterial({ color: 0xd9a63a});
         for (let i = 0; i < 3; i++) {
           const step = new THREE.Mesh(new THREE.CylinderGeometry(9 - i * 2, 9.5 - i * 2, 1, 24), stone);
           step.position.set(cx, 0.8 + i, cz);
-          step.castShadow = step.receiveShadow = true;
+          step.castShadow = step.receiveShadow = false;
           group.add(step);
         }
         const column = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 36, 16), stone);
         column.position.set(cx, 21, cz);
-        column.castShadow = true;
+        column.castShadow = false;
         group.add(column);
         const capital = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 1.8, 2, 16), stone);
         capital.position.set(cx, 40, cz);
@@ -436,27 +468,27 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   }
 
   // Merge everything by material.
-  group.add(sidewalkTo(sidewalkGeos, new THREE.MeshStandardMaterial({ map: cobble, roughness: 0.9, color: 0xb8b0a4 })));
-  group.add(sidewalkTo(kerbGeos, new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 0.8 })));
-  const windowMats: THREE.MeshStandardMaterial[] = [];
+  group.add(sidewalkTo(sidewalkGeos, new THREE.MeshLambertMaterial({ map: cobble, color: 0xb8b0a4 })));
+  group.add(sidewalkTo(kerbGeos, new THREE.MeshLambertMaterial({ color: 0x8a847a})));
+  const windowMats: THREE.MeshLambertMaterial[] = [];
   for (const { facade, geos } of buildings.values()) {
     if (!geos.length) continue;
-    const mat = new THREE.MeshStandardMaterial({ map: facade.map, emissiveMap: facade.emissive, emissive: 0xffffff, emissiveIntensity: 0, roughness: facade.roughness, metalness: facade.metalness, color: facade.color });
+    const mat = new THREE.MeshLambertMaterial({ map: facade.map, emissiveMap: facade.emissive, emissive: 0xffffff, emissiveIntensity: 0, color: facade.color });
     windowMats.push(mat);
-    const m = new THREE.Mesh(mergeGeometries(geos), mat);
-    m.castShadow = true;
-    m.receiveShadow = true;
+    const m = new THREE.Mesh(mergeSafe(geos), mat);
+    m.castShadow = false;
+    m.receiveShadow = false;
     group.add(m);
   }
   const roofTex = roofTexture();
   roofTex.repeat.set(0.4, 0.4);
-  if (pitchedGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(pitchedGeos), new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.9, color: 0xc08a70 }))));
-  if (roofGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(roofGeos), new THREE.MeshStandardMaterial({ color: 0x6a6460, roughness: 0.9 }))));
-  if (trimGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(trimGeos), new THREE.MeshStandardMaterial({ color: 0xe6dccb, roughness: 0.8 }))));
-  if (darkGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(darkGeos), new THREE.MeshStandardMaterial({ color: 0x4a443f, roughness: 0.85 }))));
-  if (awningGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(awningGeos), new THREE.MeshStandardMaterial({ color: 0x8a3a30, roughness: 0.9 }))));
-  if (woodGeos.length) group.add(withShadow(new THREE.Mesh(mergeGeometries(woodGeos), new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 }))));
-  if (signGeos.length) group.add(new THREE.Mesh(mergeGeometries(signGeos), new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.5, emissive: 0x3344aa, emissiveIntensity: 0.3 })));
+  if (pitchedGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(pitchedGeos), new THREE.MeshLambertMaterial({ map: roofTex, color: 0xc08a70 }))));
+  if (roofGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(roofGeos), new THREE.MeshLambertMaterial({ color: 0x6a6460}))));
+  if (trimGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(trimGeos), new THREE.MeshLambertMaterial({ color: 0xe6dccb}))));
+  if (darkGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(darkGeos), new THREE.MeshLambertMaterial({ color: 0x4a443f}))));
+  if (awningGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(awningGeos), new THREE.MeshLambertMaterial({ color: 0x8a3a30}))));
+  if (woodGeos.length) group.add(withShadow(new THREE.Mesh(mergeSafe(woodGeos), new THREE.MeshLambertMaterial({ color: 0x8a6a48}))));
+  if (signGeos.length) group.add(new THREE.Mesh(mergeSafe(signGeos), new THREE.MeshLambertMaterial({ color: 0xd8d8d8, emissive: 0x3344aa, emissiveIntensity: 0.3 })));
   // Bollards around the central plaza.
   const bollards: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 40; i++) {
@@ -469,29 +501,29 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     bol.translate(bx, 0.75, bz);
     bollards.push(bol);
   }
-  if (bollards.length) group.add(new THREE.Mesh(mergeGeometries(bollards), new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.6 })));
-  const shopGlassMat = new THREE.MeshStandardMaterial({ color: 0x141a22, roughness: 0.35, metalness: 0.3, emissive: 0xffd9a0, emissiveIntensity: 0, envMapIntensity: 0.4 });
-  if (glassGeos.length) group.add(new THREE.Mesh(mergeGeometries(glassGeos), shopGlassMat));
+  if (bollards.length) group.add(new THREE.Mesh(mergeSafe(bollards), new THREE.MeshLambertMaterial({ color: 0x2a2a2e})));
+  const shopGlassMat = new THREE.MeshLambertMaterial({ color: 0x141a22, emissive: 0xffd9a0, emissiveIntensity: 0});
+  if (glassGeos.length) group.add(new THREE.Mesh(mergeSafe(glassGeos), shopGlassMat));
 
   // Trees (instanced).
-  const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7), new THREE.MeshStandardMaterial({ color: 0x5a4636, roughness: 0.95 }), Math.max(1, treeTrunks.length));
+  const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7), new THREE.MeshLambertMaterial({ color: 0x5a4636}), Math.max(1, treeTrunks.length));
   treeTrunks.forEach((m, i) => trunkMesh.setMatrixAt(i, m));
-  trunkMesh.castShadow = true;
+  trunkMesh.castShadow = false;
   group.add(trunkMesh);
-  const canopyMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 0.95, flatShading: true }), Math.max(1, treeCanopies.length));
+  const canopyMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0x4f7a3a, flatShading: true }), Math.max(1, treeCanopies.length));
   const cc = new THREE.Color();
   treeCanopies.forEach((m, i) => {
     canopyMesh.setMatrixAt(i, m);
     canopyMesh.setColorAt(i, cc.setHSL(0.25 + rng.next() * 0.08, 0.45, 0.28 + rng.next() * 0.14));
   });
   canopyMesh.castShadow = quality !== 'battery';
-  canopyMesh.receiveShadow = true;
+  canopyMesh.receiveShadow = false;
   group.add(canopyMesh);
 
   // Lamps.
-  group.add(withShadow(new THREE.Mesh(mergeGeometries(lampPoleGeos), new THREE.MeshStandardMaterial({ color: 0x2f3236, roughness: 0.5, metalness: 0.6 }))));
-  const lampHeadMat = new THREE.MeshStandardMaterial({ color: 0xfff1d6, emissive: 0xffd58a, emissiveIntensity: 0 });
-  group.add(new THREE.Mesh(mergeGeometries(lampHeadGeos), lampHeadMat));
+  group.add(withShadow(new THREE.Mesh(mergeSafe(lampPoleGeos), new THREE.MeshLambertMaterial({ color: 0x2f3236}))));
+  const lampHeadMat = new THREE.MeshLambertMaterial({ color: 0xfff1d6, emissive: 0xffd58a, emissiveIntensity: 0 });
+  group.add(new THREE.Mesh(mergeSafe(lampHeadGeos), lampHeadMat));
   const poolTex = radialSpriteTexture();
   const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xffd58a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
   const pools = new THREE.InstancedMesh(new THREE.PlaneGeometry(14, 14), poolMat, lamps.length);
@@ -505,10 +537,11 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   void hedgeGeos;
 
   /* ---------------- parked cars ---------------- */
-  const parkedBody = mergeGeometries([new THREE.BoxGeometry(1.8, 0.55, 4.2).translate(0, 0.6, 0), new THREE.BoxGeometry(1.55, 0.5, 2.0).translate(0, 1.12, -0.2)]);
-  const parked = new THREE.InstancedMesh(parkedBody, new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.5, clearcoat: 0.6 }), 80);
+  const parkedBody = mergeSafe([new THREE.BoxGeometry(1.8, 0.55, 4.2).translate(0, 0.6, 0), new THREE.BoxGeometry(1.55, 0.5, 2.0).translate(0, 1.12, -0.2)]);
+  const parked = new THREE.InstancedMesh(parkedBody, new THREE.MeshLambertMaterial({ color: 0xffffff}), 80);
   const carColors = [0xd9d9d9, 0x2a2a2a, 0x8a1c1c, 0x1f3a6a, 0xc9c0a8, 0x6a6a6a, 0x2f5a3a, 0xffffff, 0x3a3a4a];
   let pc = 0;
+  const parkedBoxes: Box2[] = [];
   for (let i = 0; i < 80; i++) {
     const alongX = rng.chance(0.5);
     const road = alongX ? rng.pick(roadsZ) : rng.pick(roadsX);
@@ -522,10 +555,11 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     parked.setMatrixAt(pc, pm);
     parked.setColorAt(pc, cc.setHex(rng.pick(carColors)));
     solids.push({ minX: x - 1, maxX: x + 1, minZ: z - 1, maxZ: z + 1 });
+    parkedBoxes.push({ minX: x - (alongX ? 2.1 : 0.95), maxX: x + (alongX ? 2.1 : 0.95), minZ: z - (alongX ? 0.95 : 2.1), maxZ: z + (alongX ? 0.95 : 2.1) });
     pc++;
   }
   parked.count = pc;
-  parked.castShadow = true;
+  parked.castShadow = false;
   group.add(parked);
 
   /* ---------------- graffiti wall along one avenue ---------------- */
@@ -533,11 +567,11 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   for (let i = 0; i < 4; i++) {
     const tex = graffitiTexture(seed + i * 13);
     tex.repeat.set(2, 1);
-    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.2, CELL * 1.5), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.2, CELL * 1.5), new THREE.MeshLambertMaterial({ map: tex}));
     seg.position.set(wallX, 1.9, -CITY_HALF + 20 + i * CELL * 1.5 + CELL * 0.75);
-    seg.castShadow = seg.receiveShadow = true;
+    seg.castShadow = seg.receiveShadow = false;
     group.add(seg);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, CELL * 1.5, 10), new THREE.MeshStandardMaterial({ color: 0xa8a39a, roughness: 0.8 }));
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, CELL * 1.5, 10), new THREE.MeshLambertMaterial({ color: 0xa8a39a}));
     cap.rotation.x = Math.PI / 2;
     cap.position.set(wallX, 3.5, seg.position.z);
     group.add(cap);
@@ -557,23 +591,23 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     arch.translate(x + 4.5, 8.2, viaZ);
     viaGeos.push(arch);
   }
-  const viaduct = new THREE.Mesh(mergeGeometries(viaGeos), new THREE.MeshStandardMaterial({ map: brick.map, roughness: 0.9, color: 0x9a7a6a }));
-  viaduct.castShadow = viaduct.receiveShadow = true;
+  const viaduct = new THREE.Mesh(mergeSafe(viaGeos), new THREE.MeshLambertMaterial({ map: brick.map, color: 0x9a7a6a }));
+  viaduct.castShadow = viaduct.receiveShadow = false;
   group.add(viaduct);
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.6, 5.2), new THREE.MeshStandardMaterial({ color: 0x6a6460, roughness: 0.9 }));
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.6, 5.2), new THREE.MeshLambertMaterial({ color: 0x6a6460}));
   deck.position.set(0, 9.6, viaZ);
-  deck.receiveShadow = true;
+  deck.receiveShadow = false;
   group.add(deck);
-  const rail = new THREE.Mesh(mergeGeometries([new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.9, 0.1).translate(0, 10.3, viaZ - 2.5), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.9, 0.1).translate(0, 10.3, viaZ + 2.5), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.08, 0.1).translate(0, 9.95, viaZ - 0.75), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.08, 0.1).translate(0, 9.95, viaZ + 0.75)]), new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.6 }));
+  const rail = new THREE.Mesh(mergeSafe([new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.9, 0.1).translate(0, 10.3, viaZ - 2.5), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.9, 0.1).translate(0, 10.3, viaZ + 2.5), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.08, 0.1).translate(0, 9.95, viaZ - 0.75), new THREE.BoxGeometry(CITY_HALF * 2 + 400, 0.08, 0.1).translate(0, 9.95, viaZ + 0.75)]), new THREE.MeshLambertMaterial({ color: 0x3a3a3a}));
   group.add(rail);
   const trainTex = trainTexture();
   const train = new THREE.Group();
   for (let i = 0; i < 4; i++) {
-    const car = new THREE.Mesh(new THREE.BoxGeometry(16, 3.4, 2.9), new THREE.MeshStandardMaterial({ map: trainTex, roughness: 0.5, metalness: 0.2 }));
+    const car = new THREE.Mesh(new THREE.BoxGeometry(16, 3.4, 2.9), new THREE.MeshLambertMaterial({ map: trainTex}));
     car.position.set(i * 16.6, 11.7, 0);
-    car.castShadow = true;
+    car.castShadow = false;
     train.add(car);
-    const roofM = new THREE.Mesh(new THREE.BoxGeometry(15.6, 0.3, 2.6), new THREE.MeshStandardMaterial({ color: 0xb8b0a0, roughness: 0.7 }));
+    const roofM = new THREE.Mesh(new THREE.BoxGeometry(15.6, 0.3, 2.6), new THREE.MeshLambertMaterial({ color: 0xb8b0a0}));
     roofM.position.set(i * 16.6, 13.5, 0);
     train.add(roofM);
   }
@@ -583,7 +617,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   // The deck is walkable; a staircase climbs to it from the sidewalk by the third avenue.
   platforms.push({ minX: -CITY_HALF - 200, maxX: CITY_HALF + 200, minZ: viaZ - 2.5, maxZ: viaZ + 2.5, y: 9.9, fenced: true });
   const stairX = roadsX[3] + ROAD / 2 + 2;
-  const stairMat = new THREE.MeshStandardMaterial({ color: 0x6a6460, roughness: 0.85 });
+  const stairMat = new THREE.MeshLambertMaterial({ color: 0x6a6460});
   const stairGeos: THREE.BufferGeometry[] = [];
   const stairLen = 22;
   const steps = 32;
@@ -602,8 +636,8 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     railS.rotateX(0);
     stairGeos.push(railS);
   }
-  const stairs = new THREE.Mesh(mergeGeometries(stairGeos), stairMat);
-  stairs.castShadow = stairs.receiveShadow = true;
+  const stairs = new THREE.Mesh(mergeSafe(stairGeos), stairMat);
+  stairs.castShadow = stairs.receiveShadow = false;
   group.add(stairs);
   platforms.push({ minX: stairX - 1.2, maxX: stairX + 1.2, minZ: viaZ + 2.5, maxZ: viaZ + 2.5 + stairLen, y: 9.9, ramp: { axis: 'z', y0: 9.9, y1: 0 }, fenced: true });
   // A gap in the deck rail at the stairs so you can step on.
@@ -643,24 +677,24 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
         railF.translate(ex + 0.7, (y0 + y1) / 2 + 0.6, roofInfo.z + dir * 0.8);
         feGeos.push(railF);
       }
-      const fe = new THREE.Mesh(mergeGeometries(feGeos), new THREE.MeshStandardMaterial({ color: 0x3a3a3e, roughness: 0.6, metalness: 0.6 }));
-      fe.castShadow = true;
+      const fe = new THREE.Mesh(mergeSafe(feGeos), new THREE.MeshLambertMaterial({ color: 0x3a3a3e}));
+      fe.castShadow = false;
       group.add(fe);
       // The roof itself: walkable, parapet keeps you from falling (fenced).
       platforms.push({ minX: roofInfo.minX, maxX: roofInfo.maxX + 1.6, minZ: roofInfo.minZ, maxZ: roofInfo.maxZ, y: top, fenced: true });
       // A rooftop table and chairs for the sunset.
-      const tbl = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.9), new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 }));
+      const tbl = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.9), new THREE.MeshLambertMaterial({ color: 0x8a6a48}));
       tbl.position.set(roofInfo.x, top + 0.75, roofInfo.z);
       group.add(tbl);
       for (const dz of [-0.9, 0.9]) {
-        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), new THREE.MeshStandardMaterial({ color: 0x6a4a30, roughness: 0.9 }));
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), new THREE.MeshLambertMaterial({ color: 0x6a4a30}));
         ch.position.set(roofInfo.x, top + 0.45, roofInfo.z + dz);
         group.add(ch);
       }
-      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x7a4a3a }));
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), new THREE.MeshLambertMaterial({ color: 0x7a4a3a }));
       pot.position.set(roofInfo.x + 1.2, top + 0.2, roofInfo.z - 1.2);
       group.add(pot);
-      const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshStandardMaterial({ color: 0x4f7a3a, flatShading: true }));
+      const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshLambertMaterial({ color: 0x4f7a3a, flatShading: true }));
       plant.position.set(roofInfo.x + 1.2, top + 0.7, roofInfo.z - 1.2);
       group.add(plant);
       rooftopSpot = new THREE.Vector3(roofInfo.x, top, roofInfo.z);
@@ -669,14 +703,14 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
 
   /* ---------------- landmarks and horizon ---------------- */
   const tower = new THREE.Group();
-  const towerMat = new THREE.MeshStandardMaterial({ color: 0xcfcac2, roughness: 0.6, metalness: 0.2 });
+  const towerMat = new THREE.MeshLambertMaterial({ color: 0xcfcac2});
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(3, 9, 260, 16), towerMat);
   shaft.position.y = 130;
-  const sphere = new THREE.Mesh(new THREE.SphereGeometry(16, 24, 16), new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.35, metalness: 0.6 }));
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(16, 24, 16), new THREE.MeshLambertMaterial({ color: 0xd8d4cc}));
   sphere.position.y = 230;
   const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 2, 90, 8), towerMat);
   needle.position.y = 290;
-  const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 8), new THREE.MeshStandardMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 2 }));
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 8), new THREE.MeshLambertMaterial({ color: 0xff2030, emissive: 0xff2030, emissiveIntensity: 2 }));
   beacon.position.y = 336;
   tower.add(shaft, sphere, needle, beacon);
   tower.position.set(120, 0, -CITY_HALF - 320);
@@ -695,9 +729,9 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     farGeos.push(g);
   }
   const farFacade = facadeFor('concrete', 0).facade;
-  const farMat = new THREE.MeshStandardMaterial({ map: farFacade.map, emissiveMap: farFacade.emissive, emissive: 0xffffff, emissiveIntensity: 0, color: 0xa09890, roughness: 0.9 });
+  const farMat = new THREE.MeshLambertMaterial({ map: farFacade.map, emissiveMap: farFacade.emissive, emissive: 0xffffff, emissiveIntensity: 0, color: 0xa09890});
   windowMats.push(farMat);
-  group.add(new THREE.Mesh(mergeGeometries(farGeos), farMat));
+  group.add(new THREE.Mesh(mergeSafe(farGeos), farMat));
   // A few distant spires and a dome.
   for (let i = 0; i < 6; i++) {
     const a = rng.next() * Math.PI * 2;
@@ -706,9 +740,9 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     spire.position.set(Math.cos(a) * r, 60, Math.sin(a) * r);
     group.add(spire);
   }
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x5f8a6a, roughness: 0.6, metalness: 0.4 }));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(28, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x5f8a6a}));
   dome.position.set(-CITY_HALF - 160, 40, -80);
-  const domeBase = new THREE.Mesh(new THREE.BoxGeometry(90, 40, 70), new THREE.MeshStandardMaterial({ map: facadeFor('plaster', 0).facade.map, roughness: 0.9 }));
+  const domeBase = new THREE.Mesh(new THREE.BoxGeometry(90, 40, 70), new THREE.MeshLambertMaterial({ map: facadeFor('plaster', 0).facade.map}));
   domeBase.position.set(-CITY_HALF - 160, 20, -80);
   group.add(dome, domeBase);
 
@@ -729,16 +763,81 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       edgeGeos.push(post);
     }
   }
-  group.add(new THREE.Mesh(mergeGeometries(edgeGeos), new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 0.8 })));
+  group.add(new THREE.Mesh(mergeSafe(edgeGeos), new THREE.MeshLambertMaterial({ color: 0x8a847a})));
   // Outer ground beyond the edge: a grassy embankment so the far buildings sit on something.
-  const outer = new THREE.Mesh(new THREE.RingGeometry(edge * 1.35, 2600, 48), new THREE.MeshStandardMaterial({ color: 0x5a6a3a, roughness: 1 }));
+  const outer = new THREE.Mesh(new THREE.RingGeometry(edge * 1.35, 2600, 48), new THREE.MeshLambertMaterial({ color: 0x5a6a3a}));
   outer.rotation.x = -Math.PI / 2;
   outer.position.y = 0.02;
   group.add(outer);
 
+  // Street props (dumpsters, stalls, cafés, hydrants, containers...).
+  const props = buildProps(rng, blockInfo, roadsX, roadsZ);
+  group.add(props.group);
+  for (const s of props.solids) solids.push({ minX: s.minX, maxX: s.maxX, minZ: s.minZ, maxZ: s.maxZ });
+  for (const pl of props.platforms) platforms.push({ ...pl });
+  const obstacles: Solid3[] = [...props.solids];
+  // Parked cars are vaultable too.
+  for (const pcar of parkedBoxes) obstacles.push({ ...pcar, h: 1.5 });
+
+  // Working traffic lights: a pole at two corners of every intersection, red/green heads that cycle.
+  const tlGeos: THREE.BufferGeometry[] = [];
+  const tlRed = new THREE.MeshLambertMaterial({ color: 0x3a0000, emissive: 0xff2030, emissiveIntensity: 0.1 });
+  const tlGreen = new THREE.MeshLambertMaterial({ color: 0x003a10, emissive: 0x30ff70, emissiveIntensity: 0.1 });
+  const tlAmber = new THREE.MeshLambertMaterial({ color: 0x3a2a00, emissive: 0xffb020, emissiveIntensity: 0.1 });
+  const heads: { x: number; z: number; axis: 'x' | 'z'; r: THREE.Mesh; a: THREE.Mesh; g: THREE.Mesh }[] = [];
+  const lampSphere = new THREE.SphereGeometry(0.14, 8, 6);
+  for (const x of roadsX) {
+    for (const z of roadsZ) {
+      // Two heads per axis, hung from arms over the road.
+      for (const [sx, sz, axis] of [[1, 1, 'x'], [-1, -1, 'x'], [1, -1, 'z'], [-1, 1, 'z']] as const) {
+        const px = x + sx * (ROAD / 2 - 0.6);
+        const pz = z + sz * (ROAD / 2 - 0.6);
+        const pole = new THREE.CylinderGeometry(0.09, 0.11, 5.6, 8);
+        pole.translate(px, 2.8, pz);
+        tlGeos.push(pole);
+        const armLen = 4.5;
+        const arm = axis === 'x' ? new THREE.BoxGeometry(0.1, 0.1, armLen) : new THREE.BoxGeometry(armLen, 0.1, 0.1);
+        const ax = axis === 'x' ? px : px - sx * armLen / 2;
+        const az = axis === 'x' ? pz - sz * armLen / 2 : pz;
+        arm.translate(ax, 5.55, az);
+        tlGeos.push(arm);
+        const hx = axis === 'x' ? px : px - sx * armLen * 0.85;
+        const hz = axis === 'x' ? pz - sz * armLen * 0.85 : pz;
+        const head = new THREE.BoxGeometry(0.36, 1.0, 0.36);
+        head.translate(hx, 5.0, hz);
+        tlGeos.push(head);
+        const mk = (mat: THREE.Material, y: number) => {
+          const m = new THREE.Mesh(lampSphere, mat.clone());
+          m.position.set(hx + (axis === 'x' ? 0 : 0), y, hz);
+          // Face the oncoming traffic on this axis.
+          if (axis === 'x') m.position.x += sx * 0.2;
+          else m.position.z += sz * 0.2;
+          group.add(m);
+          return m;
+        };
+        heads.push({ x, z, axis, r: mk(tlRed, 5.32), a: mk(tlAmber, 5.0), g: mk(tlGreen, 4.68) });
+      }
+    }
+  }
+  group.add(new THREE.Mesh(mergeSafe(tlGeos), new THREE.MeshLambertMaterial({ color: 0x1a1a22})));
+  const CYCLE = 24;
+  const lightXGreen = (x: number, z: number, t: number): boolean => {
+    const phase = ((x + z) * 0.013 + t / CYCLE) % 1;
+    return phase < 0.5;
+  };
+  const lightPhase = (x: number, z: number, t: number): 'xg' | 'xa' | 'zg' | 'za' => {
+    const phase = ((x + z) * 0.013 + t / CYCLE) % 1;
+    if (phase < 0.42) return 'xg';
+    if (phase < 0.5) return 'xa';
+    if (phase < 0.92) return 'zg';
+    return 'za';
+  };
+
   scene.add(group);
   let trainDir = 1;
   const trainVel = new THREE.Vector3();
+  const trainRoof = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, y: 0 };
+  const trainBox = new THREE.Box3();
   const heightAt = (x: number, z: number, nearY: number): number => {
     let best = 0;
     for (const p of platforms) {
@@ -760,13 +859,25 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     train,
     trainVel,
     trainLen: 4 * 16.6,
+    trainRoof,
     heightAt,
     rooftopSpot,
+    props,
+    obstacles,
+    lightXGreen,
     lamps,
     roadsZ,
     roadsX,
     neon,
     update(_t, dt) {
+      for (const h of heads) {
+        const ph = lightPhase(h.x, h.z, _t);
+        const green = h.axis === 'x' ? ph === 'xg' : ph === 'zg';
+        const amber = h.axis === 'x' ? ph === 'xa' : ph === 'za';
+        (h.r.material as THREE.MeshLambertMaterial).emissiveIntensity = !green && !amber ? 3 : 0.1;
+        (h.a.material as THREE.MeshLambertMaterial).emissiveIntensity = amber ? 3 : 0.1;
+        (h.g.material as THREE.MeshLambertMaterial).emissiveIntensity = green ? 3 : 0.1;
+      }
       // The train slows into the station by the stairs, waits, then pulls away.
       const stationX = stairX - 4 * 16.6 * 0.5;
       const dToStation = Math.abs(train.position.x - stationX);
@@ -783,6 +894,13 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       const dx = trainDir * speed * dt;
       train.position.x += dx;
       trainVel.set(dt > 0 ? dx / dt : 0, 0, 0);
+      train.updateMatrixWorld(true);
+      trainBox.setFromObject(train);
+      trainRoof.minX = trainBox.min.x;
+      trainRoof.maxX = trainBox.max.x;
+      trainRoof.minZ = trainBox.min.z + 0.1;
+      trainRoof.maxZ = trainBox.max.z - 0.1;
+      trainRoof.y = trainBox.max.y;
       if (train.position.x > CITY_HALF + 160) {
         trainDir = -1;
         (train as any).__left = false;
@@ -802,13 +920,13 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
 }
 
 function withShadow<T extends THREE.Mesh>(m: T): T {
-  m.castShadow = true;
-  m.receiveShadow = true;
+  m.castShadow = false;
+  m.receiveShadow = false;
   return m;
 }
 function sidewalkTo(geos: THREE.BufferGeometry[], mat: THREE.Material): THREE.Mesh {
-  const m = new THREE.Mesh(mergeGeometries(geos), mat);
-  m.receiveShadow = true;
-  m.castShadow = true;
+  const m = new THREE.Mesh(mergeSafe(geos), mat);
+  m.receiveShadow = false;
+  m.castShadow = false;
   return m;
 }

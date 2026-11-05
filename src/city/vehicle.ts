@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Box2 } from './world';
-import { radialSpriteTexture, CITY_HALF } from './world';
+import { radialSpriteTexture, CITY_HALF, blobShadow } from './world';
 
 export interface CarInput {
   throttle: number;
@@ -10,7 +9,7 @@ export interface CarInput {
   handbrake: boolean;
 }
 
-export type CarKind = 'sedan' | 'hatch' | 'sports' | 'van' | 'taxi' | 'bike';
+export type CarKind = 'sedan' | 'hatch' | 'sports' | 'van' | 'taxi' | 'bike' | 'bus';
 export const CAR_COLORS = [0xd9d9d9, 0x2a2a2a, 0x8a1c1c, 0x1f3a6a, 0xc9c0a8, 0x6a6a6a, 0x2f5a3a, 0xffffff, 0x4a3a7a, 0xb86a2a];
 
 const tmp = new THREE.Vector3();
@@ -28,8 +27,8 @@ export class Car {
   frontWheels: THREE.Group[] = [];
   body = new THREE.Group();
   headlights: THREE.SpotLight[] = [];
-  tailMat: THREE.MeshStandardMaterial;
-  headMat: THREE.MeshStandardMaterial;
+  tailMat: THREE.MeshLambertMaterial;
+  headMat: THREE.MeshLambertMaterial;
   drifting = 0;
   bump = 0;
   ai = false;
@@ -50,16 +49,16 @@ export class Car {
   constructor(color: number, withShadowLights = false, realLights = true, kind: CarKind = 'sedan') {
     this.color = color;
     this.kind = kind;
-    const paint = new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.6, clearcoat: 0.9, clearcoatRoughness: 0.12 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.6, metalness: 0.3 });
-    const glass = new THREE.MeshPhysicalMaterial({ color: 0x1c2733, roughness: 0.08, metalness: 0.8, transparent: true, opacity: 0.88 });
-    const chrome = new THREE.MeshStandardMaterial({ color: 0xd8d8e0, roughness: 0.2, metalness: 1 });
-    this.tailMat = new THREE.MeshStandardMaterial({ color: 0x8a1010, emissive: 0xff2030, emissiveIntensity: 0.2 });
-    this.headMat = new THREE.MeshStandardMaterial({ color: 0xfff4ec, emissive: 0xfff0d0, emissiveIntensity: 0.1 });
+    const paint = new THREE.MeshLambertMaterial({ color});
+    const dark = new THREE.MeshLambertMaterial({ color: 0x1a1a1e});
+    const glass = new THREE.MeshLambertMaterial({ color: 0x2a3a4a, transparent: true, opacity: 0.8 });
+    const chrome = new THREE.MeshLambertMaterial({ color: 0xd8d8e0});
+    this.tailMat = new THREE.MeshLambertMaterial({ color: 0x8a1010, emissive: 0xff2030, emissiveIntensity: 0.2 });
+    this.headMat = new THREE.MeshLambertMaterial({ color: 0xfff4ec, emissive: 0xfff0d0, emissiveIntensity: 0.1 });
     const b = this.body;
     const sh = (m: THREE.Mesh) => {
-      m.castShadow = true;
-      m.receiveShadow = true;
+      m.castShadow = false;
+      m.receiveShadow = false;
       return m;
     };
     // Silhouette parameters per kind.
@@ -74,25 +73,26 @@ export class Car {
       sports: { len: 4.4, wid: 1.9, lowH: 0.48, cabinZ: -0.45, cabinL: 1.7, cabinH: 0.46, hoodL: 1.9, trunkL: 0.7 },
       van: { len: 5.0, wid: 1.95, lowH: 0.8, cabinZ: -0.5, cabinL: 3.6, cabinH: 0.9, hoodL: 0.8, trunkL: 0.0 },
       taxi: { len: 4.6, wid: 1.86, lowH: 0.56, cabinZ: -0.2, cabinL: 2.1, cabinH: 0.55, hoodL: 1.5, trunkL: 1.1 },
+      bus: { len: 11.0, wid: 2.5, lowH: 1.0, cabinZ: 0, cabinL: 10.4, cabinH: 1.5, hoodL: 0.3, trunkL: 0.0 },
     }[kind];
-    const lower = sh(new THREE.Mesh(new RoundedBoxGeometry(P.wid, P.lowH, P.len, 3, 0.12), paint));
+    const lower = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid, P.lowH, P.len), paint));
     lower.position.y = 0.42 + P.lowH / 2;
     b.add(lower);
     // Hood and trunk as slightly narrower, lower slabs with a rake.
-    const hood = sh(new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.1, 0.22, P.hoodL, 2, 0.08), paint));
+    const hood = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.1, 0.22, P.hoodL), paint));
     hood.position.set(0, 0.42 + P.lowH + 0.08, P.len / 2 - P.hoodL / 2 - 0.1);
     hood.rotation.x = 0.06;
     b.add(hood);
     if (P.trunkL > 0.2) {
-      const trunk = sh(new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.1, 0.24, P.trunkL, 2, 0.08), paint));
+      const trunk = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.1, 0.24, P.trunkL), paint));
       trunk.position.set(0, 0.42 + P.lowH + 0.1, -P.len / 2 + P.trunkL / 2 + 0.1);
       b.add(trunk);
     }
     // Cabin: glass block with paint pillars and roof.
-    const cabin = sh(new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.22, P.cabinH, P.cabinL, 3, 0.14), glass));
+    const cabin = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.22, P.cabinH, P.cabinL), glass));
     cabin.position.set(0, 0.42 + P.lowH + P.cabinH / 2 + 0.05, P.cabinZ);
     b.add(cabin);
-    const roof = sh(new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.3, 0.1, P.cabinL - 0.3, 2, 0.04), paint));
+    const roof = sh(new THREE.Mesh(new THREE.BoxGeometry(P.wid - 0.3, 0.1, P.cabinL - 0.3), paint));
     roof.position.set(0, cabin.position.y + P.cabinH / 2, P.cabinZ);
     b.add(roof);
     for (const z of [P.cabinZ + P.cabinL / 2 - 0.06, P.cabinZ - P.cabinL / 2 + 0.06]) {
@@ -109,7 +109,7 @@ export class Car {
       b.add(arch);
     }
     // Bumpers, grille, mirrors, plates, exhaust.
-    const bumperF = new THREE.Mesh(new RoundedBoxGeometry(P.wid + 0.02, 0.28, 0.32, 2, 0.08), dark);
+    const bumperF = new THREE.Mesh(new THREE.BoxGeometry(P.wid + 0.02, 0.28, 0.32), dark);
     bumperF.position.set(0, 0.42, P.len / 2 - 0.05);
     const bumperB = bumperF.clone();
     bumperB.position.z = -P.len / 2 + 0.05;
@@ -126,20 +126,20 @@ export class Car {
       ex.position.set(sx * 0.5, 0.32, -P.len / 2 - 0.05);
       b.add(ex);
     }
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.02), new THREE.MeshStandardMaterial({ color: 0xf2f2f2 }));
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.02), new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
     plate.position.set(0, 0.5, -P.len / 2 - 0.1);
     b.add(plate);
     if (kind === 'taxi') {
-      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.3), new THREE.MeshStandardMaterial({ color: 0xffd04a, emissive: 0xffc830, emissiveIntensity: 0.6 }));
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.3), new THREE.MeshLambertMaterial({ color: 0xffd04a, emissive: 0xffc830, emissiveIntensity: 0.6 }));
       sign.position.set(0, roof.position.y + 0.14, P.cabinZ);
       b.add(sign);
     }
     // Lights.
     for (const sx of [-0.62, 0.62]) {
-      const h = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.18, 0.1, 2, 0.04), this.headMat);
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.1), this.headMat);
       h.position.set(sx * (P.wid / 1.86), 0.42 + P.lowH * 0.75, P.len / 2 + 0.03);
       b.add(h);
-      const t = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.16, 0.1, 2, 0.04), this.tailMat);
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.1), this.tailMat);
       t.position.set(sx * (P.wid / 1.86), 0.42 + P.lowH * 0.8, -P.len / 2 - 0.03);
       b.add(t);
       const glowTex = radialSpriteTexture();
@@ -167,13 +167,13 @@ export class Car {
     }
     // Driver: head and shoulders behind the wheel, visible through the glass.
     this.driver = new THREE.Group();
-    const skinM = new THREE.MeshStandardMaterial({ color: [0xe3b08a, 0xc98a5a, 0xa8714c, 0xf1c6a7][Math.abs(color) % 4], roughness: 0.6 });
-    const shirtM = new THREE.MeshStandardMaterial({ color: [0x2a2a2a, 0x9a9a9a, 0x3a5a8a, 0x7a2e2e][Math.abs(color >> 4) % 4], roughness: 0.8 });
-    const torso = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.5, 0.26, 2, 0.06), shirtM);
+    const skinM = new THREE.MeshLambertMaterial({ color: [0xe3b08a, 0xc98a5a, 0xa8714c, 0xf1c6a7][Math.abs(color) % 4]});
+    const shirtM = new THREE.MeshLambertMaterial({ color: [0x2a2a2a, 0x9a9a9a, 0x3a5a8a, 0x7a2e2e][Math.abs(color >> 4) % 4]});
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.26), shirtM);
     torso.position.set(-0.38, 0.42 + P.lowH + 0.2, P.cabinZ + 0.1);
-    const head = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.24, 0.22, 2, 0.06), skinM);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 0.22), skinM);
     head.position.set(-0.38, torso.position.y + 0.42, P.cabinZ + 0.1);
-    const hair = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.09, 0.23, 2, 0.04), new THREE.MeshStandardMaterial({ color: 0x1a1016, roughness: 0.9 }));
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.09, 0.23), new THREE.MeshLambertMaterial({ color: 0x1a1016}));
     hair.position.set(-0.38, head.position.y + 0.12, P.cabinZ + 0.1);
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16), dark);
     wheel.position.set(-0.38, 0.42 + P.lowH + 0.3, P.cabinZ + 0.75);
@@ -181,35 +181,24 @@ export class Car {
     this.driver.add(torso, head, hair, wheel);
     this.driver.visible = false;
     b.add(this.driver);
-    // Interior: two seats, dashboard, a steering column; visible through the glass.
-    const seatM = new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: 0.95 });
-    for (const sx of [-0.38, 0.38]) {
-      const seat = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.2, 0.55, 2, 0.05), seatM);
-      seat.position.set(sx, 0.42 + P.lowH + 0.08, P.cabinZ + 0.05);
-      const back = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.6, 0.14, 2, 0.05), seatM);
-      back.position.set(sx, 0.42 + P.lowH + 0.42, P.cabinZ - 0.25);
-      b.add(seat, back);
-    }
-    const dash = new THREE.Mesh(new RoundedBoxGeometry(P.wid - 0.3, 0.26, 0.5, 2, 0.05), new THREE.MeshStandardMaterial({ color: 0x1e1b1a, roughness: 0.7 }));
-    dash.position.set(0, 0.42 + P.lowH + 0.2, P.cabinZ + P.cabinL / 2 - 0.2);
-    b.add(dash);
     // Driver door: hinged at the front edge, swings out when someone gets in or out.
     this.door = new THREE.Group();
     const doorL = P.cabinL * 0.55;
     const hingeZ = P.cabinZ + P.cabinL / 2 - 0.05;
     this.door.position.set(-(P.wid / 2), 0.42 + P.lowH / 2, hingeZ);
-    const panel = sh(new THREE.Mesh(new RoundedBoxGeometry(0.06, P.lowH - 0.04, doorL, 2, 0.02), paint));
+    const panel = sh(new THREE.Mesh(new THREE.BoxGeometry(0.06, P.lowH - 0.04, doorL), paint));
     panel.position.set(0, 0, -doorL / 2);
-    const win = new THREE.Mesh(new RoundedBoxGeometry(0.04, P.cabinH - 0.08, doorL - 0.2, 2, 0.02), glass);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.04, P.cabinH - 0.08, doorL - 0.2), glass);
     win.position.set(0.02, P.lowH / 2 + P.cabinH / 2 + 0.02, -doorL / 2);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.16), chrome);
     handle.position.set(-0.04, 0.1, -doorL * 0.75);
     this.door.add(panel, win, handle);
     b.add(this.door);
+    this.mesh.add(blobShadow(P.wid + 0.6, P.len + 0.6));
     this.mesh.add(b);
     // Wheels.
-    const tyre = new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 0.9 });
-    const rim = new THREE.MeshStandardMaterial({ color: 0xcfcfd8, roughness: 0.25, metalness: 1 });
+    const tyre = new THREE.MeshLambertMaterial({ color: 0x151518});
+    const rim = new THREE.MeshLambertMaterial({ color: 0xcfcfd8});
     for (const [sx, sz] of [[-1, 1.45], [1, 1.45], [-1, -1.45], [1, -1.45]] as const) {
       const hub = new THREE.Group();
       const w = sh(new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.26, 20), tyre));
@@ -226,12 +215,21 @@ export class Car {
       if (sz > 0) this.frontWheels.push(steerGroup);
     }
     this.radius = P.len * 0.32;
+    if (kind === 'bus') {
+      // Route board and a stripe.
+      const board = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 0.05), new THREE.MeshLambertMaterial({ color: 0xffd04a, emissive: 0xffc830, emissiveIntensity: 0.8 }));
+      board.position.set(0, 0.42 + P.lowH + P.cabinH + 0.1, P.len / 2 + 0.03);
+      b.add(board);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(P.wid + 0.04, 0.25, P.len - 0.4), new THREE.MeshLambertMaterial({ color: 0xd9b43a}));
+      stripe.position.set(0, 0.42 + P.lowH * 0.5, 0);
+      b.add(stripe);
+    }
   }
 
   private buildBike(paint: THREE.Material, dark: THREE.Material, chrome: THREE.Material): void {
     const b = this.body;
     const sh = (m: THREE.Mesh) => {
-      m.castShadow = true;
+      m.castShadow = false;
       return m;
     };
     const tube = (a: THREE.Vector3, c: THREE.Vector3, r = 0.03, mat: THREE.Material = paint) => {
@@ -257,10 +255,10 @@ export class Car {
     bar.rotation.z = Math.PI / 2;
     bar.position.set(0, 1.0, 0.45);
     b.add(bar);
-    const seat = sh(new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.06, 0.28, 2, 0.02), dark));
+    const seat = sh(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.28), dark));
     seat.position.copy(seatP).add(new THREE.Vector3(0, 0.03, 0));
     b.add(seat);
-    const tyre = new THREE.MeshStandardMaterial({ color: 0x151518, roughness: 0.9 });
+    const tyre = new THREE.MeshLambertMaterial({ color: 0x151518});
     for (const [z, isFront] of [[-0.55, false], [0.55, true]] as const) {
       const hub = new THREE.Group();
       const w = sh(new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.035, 8, 20), tyre));
@@ -290,31 +288,31 @@ export class Car {
     b.add(this.pedals);
     // Rider: seated human pieces (torso leaning forward, legs on the pedals), shown only when ridden.
     this.driver = new THREE.Group();
-    const skin = new THREE.MeshStandardMaterial({ color: 0xe3b08a, roughness: 0.6 });
-    const shirt = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.8 });
-    const jeans = new THREE.MeshStandardMaterial({ color: 0x3a5a8a, roughness: 0.8 });
-    const torso = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.56, 0.26, 2, 0.06), shirt);
+    const skin = new THREE.MeshLambertMaterial({ color: 0xe3b08a});
+    const shirt = new THREE.MeshLambertMaterial({ color: 0x2b2b2b});
+    const jeans = new THREE.MeshLambertMaterial({ color: 0x3a5a8a});
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.56, 0.26), shirt);
     torso.position.set(0, 1.28, -0.05);
     torso.rotation.x = 0.35;
-    const headM = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.24, 0.22, 2, 0.06), skin);
+    const headM = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.24, 0.22), skin);
     headM.position.set(0, 1.66, 0.1);
-    const hair = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.09, 0.23, 2, 0.04), new THREE.MeshStandardMaterial({ color: 0x1a1016 }));
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.09, 0.23), new THREE.MeshLambertMaterial({ color: 0x1a1016 }));
     hair.position.set(0, 1.78, 0.1);
     this.driver.add(torso, headM, hair);
     for (const s of [-1, 1]) {
-      const arm = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.55, 0.1, 2, 0.04), shirt);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.1), shirt);
       arm.position.set(s * 0.26, 1.25, 0.22);
       arm.rotation.x = -0.9;
       this.driver.add(arm);
       const leg = new THREE.Group();
       leg.position.set(s * 0.14, 1.0, -0.2);
-      const thigh = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.42, 0.17, 2, 0.05), jeans);
+      const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.42, 0.17), jeans);
       thigh.position.y = -0.2;
       const shin = new THREE.Group();
       shin.position.y = -0.42;
-      const shinM = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.42, 0.15, 2, 0.04), jeans);
+      const shinM = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.42, 0.15), jeans);
       shinM.position.y = -0.2;
-      const shoe = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.08, 0.26, 2, 0.03), new THREE.MeshStandardMaterial({ color: 0xf2f2f2 }));
+      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.26), new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
       shoe.position.set(0, -0.42, 0.05);
       shin.add(shinM, shoe);
       leg.add(thigh, shin);
@@ -323,6 +321,7 @@ export class Car {
     }
     this.driver.visible = false;
     b.add(this.driver);
+    this.mesh.add(blobShadow(1.0, 2.0));
     this.mesh.add(b);
   }
 
@@ -358,7 +357,7 @@ export class Car {
     const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
     const vF = this.vel.dot(fwd);
     const vR = this.vel.dot(right);
-    const maxSpeed = (this as any).__maxOverride ?? (this.ai ? 16 : this.kind === 'sports' ? 52 : this.kind === 'van' ? 36 : this.kind === 'bike' ? 11 : 44);
+    const maxSpeed = (this as any).__maxOverride ?? (this.ai ? 16 : this.kind === 'sports' ? 52 : this.kind === 'van' ? 36 : this.kind === 'bike' ? 11 : this.kind === 'bus' ? 30 : 44);
     let accel = 0;
     if (inp.throttle > 0) accel += (vF < 0 ? 22 : (this.kind === 'sports' ? 19 : this.kind === 'bike' ? 6 : 15) * (1 - Math.max(0, vF) / maxSpeed) + 3) * inp.throttle;
     if (inp.brake > 0) accel -= vF > 0.5 ? 28 * inp.brake : 9 * inp.brake;

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.0 — NEON CITY: PS2-era art direction, NPCs, props, parkour, traffic lights
+
+Art direction pivoted to an intentional early-2000s open-world look (same map, missions, cars and controls).
+- Diffuse-only materials everywhere (Lambert, no normal/roughness/metalness maps, no environment maps, no tone mapping), flat directional sun + hemisphere fill, no shadow maps; blob shadows under every person and car.
+- Heavy distance fog that takes the sky colour by time of day; gradient sky dome, flat cloud sheet, stars, sun disc.
+- Post reduced to a mild grade (light vignette, warm tint at sunset). No bloom, blur, grain, AO or chromatic aberration.
+- Wet dusk/night roads: planar mirror under a translucent asphalt plane; rain particles at night.
+- Characters: blocky bodies, mitten hands, painted faces on flat heads, stepped walk cycles. Cars: box shells with flat shading, box lights, opaque-ish windows, no interiors (driver + door kept).
+- Texture filtering toggle in the HUD: Soft (linear) / Crisp (nearest).
+- Train: a roof collider is rebuilt from the train mesh every frame; prompt reads "Surfing the train · Space to jump off". Context tips differ on foot / in a vehicle / on the train.
+- Street dressing: dumpsters, shipping containers, market stalls, café terraces, hydrants, mailboxes, planters, cones and barriers, scooters, posters; working traffic lights that AI drivers obey; buses in traffic.
+- NPCs with lives: walkers, joggers, chatting groups, café sitters, phone checkers; they flee from fast cars and the horn, and get knocked over.
+- Parkour: Space jumps; low obstacles are vaulted when you run at them; ledges up to 3 m are mantled; long falls end in a roll.
+- Fixed: delivery payout confirmed to update the CASH HUD (covered by e2e); player stuck inside a solid now exits through the nearest face.
+
 ## 1.3.0 — NEON CITY: train surfing, bike, car doors and interiors, rooftop
 
 - Walkable elevation: platforms, ramps and gravity. A staircase by the third avenue climbs to the rail viaduct; the train slows into the station, waits, and you can ride on its roof (surf pose, carried with the train, jump off anywhere).

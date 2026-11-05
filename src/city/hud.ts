@@ -18,6 +18,7 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
       <div class="c-cash"><span class="c-label">CASH</span><span class="c-cash-v num">$0</span></div>
       <div class="c-speed"><span class="c-speed-v num">0</span><span class="c-label">KM/H</span></div>
     </div>
+    <button class="c-filter" aria-label="Texture filtering">SOFT</button>
     <div class="c-wanted" aria-label="Wanted level"></div>
     <div class="c-mission hidden"><div class="c-mission-title display"></div><div class="c-mission-detail"></div><div class="c-timer"><i></i></div></div>
     <div class="c-prompt"></div>
@@ -29,12 +30,12 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
       <div class="c-buttons">
         <button class="c-btn c-gas" aria-label="Accelerate">GAS</button>
         <button class="c-btn c-brake" aria-label="Brake">BRAKE</button>
-        <button class="c-btn c-hand" aria-label="Handbrake">DRIFT</button>
+        <button class="c-btn c-hand" aria-label="Jump or handbrake">JUMP</button>
         <button class="c-btn c-act" aria-label="Enter or leave the car">ENTER</button>
         <button class="c-btn c-horn" aria-label="Horn">HORN</button>
       </div>
     </div>
-    <div class="c-keys">WASD / arrows drive · Space drift · E enter car · H horn · C camera · R reset</div>
+    <div class="c-keys">WASD move · Space jump / vault / drift · E enter car · H horn · C camera · R reset</div>
   `;
   const $ = <T extends HTMLElement>(s: string) => root.querySelector(s) as T;
   const cashV = $('.c-cash-v');
@@ -48,6 +49,14 @@ export function mountHud(root: HTMLElement, input: Input): HudRefs {
   const toasts = $('.c-toasts');
   const flash = $('.c-flash');
   const wanted = $('.c-wanted');
+  const filterBtn = $('.c-filter');
+  const crispNow = localStorage.getItem('neoncity.filter') === 'crisp';
+  filterBtn.textContent = crispNow ? 'CRISP' : 'SOFT';
+  filterBtn.addEventListener('click', () => {
+    const next = filterBtn.textContent === 'SOFT' ? 'crisp' : 'soft';
+    filterBtn.textContent = next === 'crisp' ? 'CRISP' : 'SOFT';
+    (window as any).__setFilter?.(next);
+  });
   const canvas = $('canvas') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
 

@@ -60,7 +60,7 @@ export class SkyDome {
   /** Real seconds per game day. */
   dayLength = 14 * 60;
 
-  constructor(scene: THREE.Scene, shadows: boolean, shadowSize: number) {
+  constructor(scene: THREE.Scene) {
     this.sky = new THREE.Mesh(
       new THREE.SphereGeometry(3800, 48, 24),
       new THREE.ShaderMaterial({
@@ -87,19 +87,6 @@ export class SkyDome {
     scene.add(this.sky);
 
     this.sunLight = new THREE.DirectionalLight(0xffe0b0, 2.2);
-    this.sunLight.castShadow = shadows;
-    this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
-    this.sunLight.shadow.camera.near = 20;
-    this.sunLight.shadow.camera.far = 900;
-    const sb = 110;
-    this.sunLight.shadow.camera.left = -sb;
-    this.sunLight.shadow.camera.right = sb;
-    this.sunLight.shadow.camera.top = sb;
-    this.sunLight.shadow.camera.bottom = -sb;
-    this.sunLight.shadow.bias = -0.0006;
-    this.sunLight.shadow.normalBias = 0.4;
-    this.sunLight.shadow.radius = 3;
-    this.sunLight.shadow.camera.updateProjectionMatrix();
     scene.add(this.sunLight, this.sunLight.target);
     this.hemi = new THREE.HemisphereLight(0xffd2a0, 0x5a4a3a, 0.9);
     scene.add(this.hemi);
@@ -166,15 +153,16 @@ export class SkyDome {
     this.sunLight.target.position.copy(focus);
     const sunCol = new THREE.Color().setHSL(0.075 - a.warmth * 0.04, 0.85, 0.6 + a.daylight * 0.15);
     this.sunLight.color.copy(sunCol);
-    this.sunLight.intensity = 1.35 * a.daylight * (0.75 + 0.25 * (1 - a.warmth));
+    this.sunLight.intensity = 1.6 * a.daylight * (0.8 + 0.2 * (1 - a.warmth));
     this.sunLight.visible = a.elevation > -3;
-    this.hemi.intensity = 0.2 + a.daylight * 0.35;
+    this.hemi.intensity = 0.45 + a.daylight * 0.55;
     this.hemi.color.setHSL(0.07, 0.6, 0.6 + a.daylight * 0.2).lerp(new THREE.Color(0x4a5a8a), a.night);
     this.hemi.groundColor.setHSL(0.07, 0.4, 0.2 + a.daylight * 0.15);
     // Fog colour follows the horizon: warm haze by day, deep blue at night.
     fog.color.copy(k.hor).lerp(k.mid, 0.25);
-    fog.density = 0.0011 + a.warmth * 0.0014 + a.night * 0.0008;
-    renderer.toneMappingExposure = 0.78 - a.night * 0.08;
+    // Heavy retro fog: the far end of every street dissolves into the sky colour.
+    fog.density = 0.0042 + a.warmth * 0.0016 + a.night * 0.0012;
+    void renderer;
     // Clouds and stars.
     (this.clouds.material as THREE.MeshBasicMaterial).color.copy(new THREE.Color(0xfff0e0).lerp(new THREE.Color(0xff9a6a), a.warmth * 0.5).lerp(new THREE.Color(0x1a2038), a.night));
     (this.clouds.material as THREE.MeshBasicMaterial).opacity = 0.35 + a.warmth * 0.25;

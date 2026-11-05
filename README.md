@@ -2,7 +2,7 @@
 
 Two original games in one Vite project:
 
-- **NEON CITY** (`/`) — an open-world driving mini game in a golden-hour European-style city with a full day-night cycle. Walk, take any car, do jobs across town (deliveries, taxi runs, street races), shake off the police when your wanted level climbs, grab a bike, climb the stairs to the viaduct and surf the train, or take the fire escape up to a rooftop. Three.js with sun shadows, bloom, ambient occlusion (High), film grade, speed blur and real headlights. Keyboard (WASD / arrows, Space drift, E enter/take car, H horn, C camera, R reset) and touch controls. `?q=high|balanced|battery` forces a quality tier, `?hour=17.3` a time of day.
+- **NEON CITY** (`/`) — an open-world driving mini game with an intentional early-2000s look (low-poly, diffuse textures, blob shadows, heavy fog, wet night roads) in a golden-hour European-style city with a full day-night cycle. Walk, take any car, do jobs across town (deliveries, taxi runs, street races), shake off the police when your wanted level climbs, grab a bike, climb the stairs to the viaduct and surf the train, or take the fire escape up to a rooftop. Three.js with sun shadows, bloom, ambient occlusion (High), film grade, speed blur and real headlights. Keyboard (WASD / arrows, Space drift, E enter/take car, H horn, C camera, R reset) and touch controls. `?q=high|balanced|battery` forces a quality tier, `?hour=17.3` a time of day, `?filter=crisp` nearest-neighbour textures. Space jumps, vaults low obstacles and climbs ledges on foot.
 - **NEON HQ** (`/hq.html`) — a startup-tower management game. Hire workers, build and upgrade rooms, pay bonuses, answer events, call meetings and grow from $650 to a million.
 
 ## Run it
