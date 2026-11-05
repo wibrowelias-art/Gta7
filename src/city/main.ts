@@ -53,7 +53,8 @@ async function boot(): Promise<void> {
           const tex = (mat as any)[key] as THREE.Texture | null;
           if (tex) {
             tex.magFilter = nearest ? THREE.NearestFilter : THREE.LinearFilter;
-            tex.minFilter = nearest ? THREE.NearestMipmapLinearFilter : THREE.LinearMipmapLinearFilter;
+            tex.minFilter = nearest ? THREE.NearestMipmapNearestFilter : THREE.LinearMipmapLinearFilter;
+            tex.anisotropy = nearest ? 1 : 8;
             tex.needsUpdate = true;
           }
         }
@@ -79,6 +80,7 @@ async function boot(): Promise<void> {
   (window as any).__setFilter = (mode: 'soft' | 'crisp') => {
     localStorage.setItem('neoncity.filter', mode);
     applyFilter(mode === 'crisp');
+    hud.toast(mode === 'crisp' ? 'Crisp textures (nearest filtering)' : 'Soft textures (linear filtering)', 'info');
   };
 
   // Street lamp pool: real point lights follow the nearest lamps.
@@ -105,6 +107,7 @@ async function boot(): Promise<void> {
   for (let i = 0; i < 3; i++) {
     const bk = new Car(0xd9d9d9, false, false, 'bike');
     bk.place(-CELL * 0.5 - 6 - i * 1.2, spawnZ + 12, Math.PI / 2);
+    bk.baseY = 0.3;
     scene.add(bk.mesh);
     bikes.push(bk);
   }
@@ -147,6 +150,8 @@ async function boot(): Promise<void> {
     if (e.type === 'complete') {
       audio.chime('cash');
       hud.flash();
+      hud.setCash(missions.cash);
+      hud.toast(`+$${e.amount ?? 0} paid`, 'good');
     }
     if (e.type === 'checkpoint') audio.chime('checkpoint');
     if (e.type === 'fail') audio.chime('fail');
@@ -275,7 +280,9 @@ async function boot(): Promise<void> {
       player.update(dt, inp.x, inp.y, inp.run, camYaw, world.solids, allCars, t, world);
       const chase = wanted > 0 ? (player.inCar ? pc.pos : player.pos) : null;
       traffic.update(dt, player.inCar ? pc : null, allCars, world.solids, t, chase);
-      npcs.update(dt, t, allCars, player.inCar ? pc.pos : player.pos, inp.horn && !!player.inCar, world.obstacles);
+      npcs.update(dt, t, allCars, player.inCar ? pc.pos : player.pos, inp.horn && !!player.inCar, world.obstacles, world.heightAt);
+      // Vehicles ride up onto sidewalks instead of sinking into them.
+      for (const c of allCars) c.baseY += (world.heightAt(c.pos.x, c.pos.z, 0.3) - c.baseY) * Math.min(1, dt * 8);
       missions.update(dt, player.inCar ? pc.pos : player.pos, t, !!player.inCar);
       // Wanted level: hitting pedestrians or ramming traffic raises it; it cools off when you behave.
       if (npcs.hits > lastHits) {

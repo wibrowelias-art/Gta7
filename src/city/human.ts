@@ -169,9 +169,9 @@ export function buildHuman(o: Outfit, variant = 0): HumanRig {
   const shoeM = new THREE.MeshLambertMaterial({ color: o.shoes });
   const soleM = new THREE.MeshLambertMaterial({ color: 0xd8d2c8 });
   const group = new THREE.Group();
-  const blob = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: blobTexture(), color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false }));
+  const blob = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), new THREE.MeshBasicMaterial({ map: blobTexture(), color: 0x000000, transparent: true, opacity: 0.38, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2;
-  blob.position.y = -0.28;
+  blob.position.y = -0.01;
   blob.renderOrder = 1;
   group.add(blob);
   const mesh = (g: THREE.BufferGeometry, m: THREE.Material | THREE.Material[], y: number, x = 0, z = 0) => {

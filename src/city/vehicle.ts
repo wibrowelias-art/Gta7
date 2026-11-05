@@ -36,6 +36,8 @@ export class Car {
   color: number;
   kind: CarKind;
   lastHit = 0;
+  /** Ground height under the vehicle (0.3 when parked on a sidewalk). */
+  baseY = 0;
   private roll = 0;
   private pitch = 0;
   private glows: THREE.Sprite[] = [];
@@ -49,7 +51,7 @@ export class Car {
   constructor(color: number, withShadowLights = false, realLights = true, kind: CarKind = 'sedan') {
     this.color = color;
     this.kind = kind;
-    const paint = new THREE.MeshLambertMaterial({ color });
+    const paint = new THREE.MeshPhongMaterial({ color, specular: 0x555555, shininess: 28 });
     const dark = new THREE.MeshLambertMaterial({ color: 0x1a1a1e});
     const glass = new THREE.MeshLambertMaterial({ color: 0x1a2430, transparent: true, opacity: 0.72 });
     const chrome = new THREE.MeshLambertMaterial({ color: 0xd8d8e0});
@@ -498,6 +500,7 @@ export class Car {
     this.pitch += (targetPitch - this.pitch) * Math.min(1, dt * 6);
     this.bump *= Math.pow(0.02, dt);
     this.mesh.position.copy(this.pos);
+    this.mesh.position.y = this.baseY;
     this.mesh.rotation.y = this.heading;
     this.body.rotation.z = this.roll + Math.sin(performance.now() * 0.05) * this.bump * 0.05;
     this.body.rotation.x = this.pitch;

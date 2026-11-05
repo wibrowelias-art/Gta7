@@ -85,14 +85,14 @@ export class Npcs {
     this.list.push(n);
   }
 
-  update(dt: number, t: number, cars: Car[], playerPos: THREE.Vector3, horn: boolean, solids: Solid3[]): void {
+  update(dt: number, t: number, cars: Car[], playerPos: THREE.Vector3, horn: boolean, solids: Solid3[], heightAt: (x: number, z: number, nearY: number) => number): void {
     for (const n of this.list) {
       const r = n.rig;
       if (n.mode === 'hit') {
         n.hit += dt;
         n.pos.addScaledVector(n.vel, dt);
         n.vel.multiplyScalar(Math.pow(0.05, dt));
-        n.mesh.position.set(n.pos.x, Math.max(0.3, 0.3 + Math.sin(Math.min(Math.PI, n.hit * 3)) * 1.2), n.pos.z);
+        n.mesh.position.set(n.pos.x, Math.max(0.03, 0.03 + Math.sin(Math.min(Math.PI, n.hit * 3)) * 1.2), n.pos.z);
         n.mesh.rotation.x = Math.min(Math.PI / 2, n.hit * 4);
         if (n.hit > 7) {
           n.hit = 0;
@@ -233,7 +233,7 @@ export class Npcs {
         r.armR.rotation.x = -1.4 - Math.sin(t * 14 + n.phase) * 0.6;
         r.head.rotation.y = Math.sin(t * 4) * 0.4;
       }
-      n.mesh.position.set(n.pos.x, 0.3, n.pos.z);
+      n.mesh.position.set(n.pos.x, heightAt(n.pos.x, n.pos.z, 0.3) + 0.03, n.pos.z);
       n.mesh.rotation.y = n.heading;
     }
   }

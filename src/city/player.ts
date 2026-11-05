@@ -77,7 +77,7 @@ export class Player {
         this.action = 'none';
         this.vy = 0;
       }
-      this.mesh.position.set(this.pos.x, this.pos.y + 0.3, this.pos.z);
+      this.mesh.position.set(this.pos.x, this.pos.y + 0.03, this.pos.z);
       this.mesh.rotation.y = this.heading;
       return;
     }
@@ -138,7 +138,7 @@ export class Player {
     }
     this.wantJump = false;
     if (this.action !== 'none') {
-      this.mesh.position.set(this.pos.x, this.pos.y + 0.3, this.pos.z);
+      this.mesh.position.set(this.pos.x, this.pos.y + 0.03, this.pos.z);
       return;
     }
     if (this.airborne) this.fallFrom = Math.max(this.fallFrom, this.pos.y);
@@ -249,7 +249,7 @@ export class Player {
       this.rig.head.rotation.x = -0.25;
     }
     this.mesh.position.copy(this.pos);
-    this.mesh.position.y = this.pos.y + 0.3;
+    this.mesh.position.y = this.pos.y + 0.03;
     this.mesh.rotation.y = this.heading;
   }
 

@@ -16,6 +16,11 @@ function mergeSafe(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 import { Rng } from '../game/rng';
 import { asphaltTexture, cobbleTexture, facadeTexture, foliageTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
 import { buildProps, type PropsOut, type Solid3 } from './props';
+import { neonLabelTexture } from './textures';
+
+const SHOP_NAMES = ['BAKERY', 'KIOSK 24', 'LAUNDRY', 'BARBER', 'NOODLE BAR', 'VINYL', 'PHARMACY', 'CAFÉ LUNA', 'TATTOO', 'FISH MARKET', 'BOOKS', 'REPAIRS', 'PIZZA', 'FLOWERS', 'ARCADE'];
+const SIGN_COLORS = [0xc8352a, 0x2a6a9a, 0x2f7a55, 0xe8b530, 0x7a3a8a, 0xd96a2a];
+const POSTER_WORDS = ['LIVE TONIGHT', 'SUNSET RADIO', 'VINYL FAIR', 'OPEN AIR', 'NIGHT MARKET', 'JAZZ CLUB', 'RECORD DAY', 'BOAT TRIP'];
 
 /** City layout constants (metres). */
 export const BLOCK = 64;
@@ -76,7 +81,7 @@ type District = 'oldtown' | 'modern' | 'industrial' | 'residential' | 'plaza';
 
 /** A soft dark disc under characters and cars: the classic blob shadow. */
 export function blobShadow(w: number, d: number, y = 0.02): THREE.Mesh {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: radialSpriteTexture(), color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: radialSpriteTexture(), color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false }));
   m.rotation.x = -Math.PI / 2;
   m.position.y = y;
   m.renderOrder = 1;
@@ -231,6 +236,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
       const sw = new THREE.BoxGeometry(half * 2, 0.3, half * 2);
       sw.translate(cx, 0.15, cz);
       sidewalkGeos.push(sw);
+      platforms.push({ minX: cx - half, maxX: cx + half, minZ: cz - half, maxZ: cz + half, y: 0.3 });
       const kerb = new THREE.BoxGeometry(half * 2 + 0.3, 0.14, half * 2 + 0.3);
       kerb.translate(cx, 0.08, cz);
       kerbGeos.push(kerb);
@@ -359,11 +365,30 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
               }
             }
           }
-          // A doorway on the street side.
+          // A doorway on the street side, a shop sign over it, posters on the wall and a bin by the door.
           const dside = rng.chance(0.5) ? 1 : -1;
+          const doorX = lot.x + (rng.next() - 0.5) * (w - 4);
           const door = new THREE.BoxGeometry(1.6, 2.6, 0.3);
-          door.translate(lot.x + (rng.next() - 0.5) * (w - 4), 1.6, lot.z + dside * (d / 2 + 0.1));
+          door.translate(doorX, 1.6, lot.z + dside * (d / 2 + 0.1));
           darkGeos.push(door);
+          const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.1), new THREE.MeshLambertMaterial({ map: neonLabelTexture(rng.pick(SHOP_NAMES), rng.pick(SIGN_COLORS), false) }));
+          sign.position.set(doorX, 3.45, lot.z + dside * (d / 2 + 0.28));
+          sign.rotation.y = dside > 0 ? 0 : Math.PI;
+          group.add(sign);
+          const signBoard = new THREE.BoxGeometry(4.4, 1.3, 0.12);
+          signBoard.translate(doorX, 3.45, lot.z + dside * (d / 2 + 0.2));
+          darkGeos.push(signBoard);
+          for (let k = 0; k < 2; k++) {
+            if (rng.next() < 0.45) continue;
+            const px = lot.x + (rng.next() - 0.5) * (w - 3);
+            const poster = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), new THREE.MeshLambertMaterial({ map: neonLabelTexture(rng.pick(POSTER_WORDS), rng.pick(SIGN_COLORS), false) }));
+            poster.position.set(px, 1.7 + rng.next() * 0.6, lot.z - dside * (d / 2 + 0.06));
+            poster.rotation.y = dside > 0 ? Math.PI : 0;
+            group.add(poster);
+          }
+          const bin = new THREE.CylinderGeometry(0.28, 0.24, 0.9, 10);
+          bin.translate(doorX + 2.4, 0.75, lot.z + dside * (d / 2 + 1.2));
+          darkGeos.push(bin);
         }
         // Cornice and roof.
         const cornice = new THREE.BoxGeometry(w + 0.8, 0.6, d + 0.8);

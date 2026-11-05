@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.1 — NEON CITY: delivery cash, ground contact, signs and filtering
+
+- Delivery/taxi/race targets sat inside building footprints, so the car could never reach them: targets now sit in the kerb lane, the completion radius is 6.5 m, and a "+$ paid" toast confirms the CASH HUD update.
+- Sidewalks are walkable platforms (0.3 m): people stand on them properly, feet touch the road elsewhere, bikes and cars ride up onto sidewalks instead of sinking.
+- Blob shadows sit at ground level and are larger/softer.
+- Car paint is diffuse + simple specular (Phong, no PBR).
+- Shop signs over every old-town/residential doorway, wall posters, bins by the doors.
+- SOFT / CRISP texture filtering toggle fixed (nearest mag + nearest-mipmap-nearest min, anisotropy off) with a confirmation toast.
+
 ## 1.5.0 — NEON CITY: models matched to the reference
 
 - Cars: one smooth low-poly shell per vehicle extruded from a side-profile silhouette with a bevel (nose, raked windscreen, roof, rear glass, tail), inset dark glass with a cabin interior volume, paint pillars, half-cylinder wheel arches, door seams, spoked rims.

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Rng } from '../game/rng';
-import { CELL, CITY_HALF, GRID, ROAD, SIDEWALK, radialSpriteTexture } from './world';
+import { CELL, CITY_HALF, GRID, ROAD, radialSpriteTexture } from './world';
 
 export interface Mission {
   kind: 'delivery' | 'race' | 'taxi';
@@ -51,7 +51,7 @@ export class Missions {
       const cx = -CITY_HALF + bx * CELL + CELL / 2;
       const cz = -CITY_HALF + bz * CELL + CELL / 2;
       const side = this.rng.int(0, 3);
-      const off = CELL / 2 - SIDEWALK - ROAD / 2 + 3; // on the road edge next to the sidewalk
+      const off = CELL / 2 - ROAD / 2 + 2.2; // in the kerb lane of the road, just past the sidewalk
       const p = side === 0 ? new THREE.Vector3(cx + off, 0, cz + this.rng.range(-20, 20)) : side === 1 ? new THREE.Vector3(cx - off, 0, cz + this.rng.range(-20, 20)) : side === 2 ? new THREE.Vector3(cx + this.rng.range(-20, 20), 0, cz + off) : new THREE.Vector3(cx + this.rng.range(-20, 20), 0, cz - off);
       if (p.distanceTo(from) > minDist) return p;
     }
@@ -109,7 +109,7 @@ export class Missions {
     const m = this.current;
     m.timeLeft -= dt;
     const target = m.targets[m.idx];
-    if (playerPos.distanceTo(target) < 4.5) {
+    if (Math.hypot(playerPos.x - target.x, playerPos.z - target.z) < 6.5) {
       m.idx++;
       if (m.idx >= m.targets.length) {
         const bonus = Math.round(m.reward * Math.max(0, m.timeLeft / m.total) * 0.5);
