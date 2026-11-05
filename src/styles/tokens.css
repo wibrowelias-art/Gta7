@@ -1,0 +1,53 @@
+/* NEON HQ design tokens. The single source of truth for colour, spacing, type and radius. */
+:root {
+  --bg: #0a0710;
+  --surface: #140f1c;
+  --raised: #1e1729;
+  --border: #34283f;
+
+  --pink: #ff3d8b;
+  --orange: #ff8a3d;
+  --gold: #ffc857;
+  --teal: #2ee6c8;
+  --cyan: #3fd0ff;
+  --purple: #8b5cf6;
+  --green: #3dff8f;
+  --red: #ff4458;
+
+  --text: #fff4ec;
+  --text-2: #c2b4c8;
+  --text-3: #9a8da4;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  --r-panel: 12px;
+  --r-btn: 10px;
+
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-body: 'Inter Variable', 'Inter', system-ui, sans-serif;
+
+  --t11: 11px;
+  --t13: 13px;
+  --t15: 15px;
+  --t18: 18px;
+  --t24: 24px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  --glass: rgba(20, 15, 28, 0.72);
+  --glass-strong: rgba(20, 15, 28, 0.88);
+  --glass-border: rgba(255, 244, 236, 0.14);
+  --glow-inner: inset 0 1px 0 rgba(255, 244, 236, 0.08), inset 0 0 24px rgba(255, 138, 61, 0.05);
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+
+  --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --dur: 240ms;
+}
