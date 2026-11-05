@@ -159,7 +159,7 @@ export class SkyDome {
     this.hemi.color.setHSL(0.07, 0.6, 0.6 + a.daylight * 0.2).lerp(new THREE.Color(0x4a5a8a), a.night);
     this.hemi.groundColor.setHSL(0.07, 0.4, 0.2 + a.daylight * 0.15);
     // Fog colour follows the horizon: warm haze by day, deep blue at night.
-    fog.color.copy(k.hor).lerp(k.mid, 0.25);
+    fog.color.copy(k.hor).lerp(k.mid, 0.3).lerp(k.sun, a.warmth * 0.12);
     // Heavy retro fog: the far end of every street dissolves into the sky colour.
     fog.density = 0.0042 + a.warmth * 0.0016 + a.night * 0.0012;
     void renderer;

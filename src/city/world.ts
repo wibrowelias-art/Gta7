@@ -16,7 +16,7 @@ function mergeSafe(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 import { Rng } from '../game/rng';
 import { asphaltTexture, cobbleTexture, facadeTexture, foliageTexture, graffitiTexture, roofTexture, trainTexture, type Facade, type FacadeStyle } from './textures';
 import { buildProps, type PropsOut, type Solid3 } from './props';
-import { neonLabelTexture } from './textures';
+import { neonLabelTexture, shopfrontTexture } from './textures';
 
 const SHOP_NAMES = ['BAKERY', 'KIOSK 24', 'LAUNDRY', 'BARBER', 'NOODLE BAR', 'VINYL', 'PHARMACY', 'CAFÉ LUNA', 'TATTOO', 'FISH MARKET', 'BOOKS', 'REPAIRS', 'PIZZA', 'FLOWERS', 'ARCADE'];
 const SIGN_COLORS = [0xc8352a, 0x2a6a9a, 0x2f7a55, 0xe8b530, 0x7a3a8a, 0xd96a2a];
@@ -149,7 +149,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const asphalt = asphaltTexture();
   asphalt.map.repeat.set(70, 70);
   asphalt.rough.repeat.set(70, 70);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(extent * 2 + 1200, extent * 2 + 1200), new THREE.MeshLambertMaterial({ map: asphalt.map, color: 0x8a8580 }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(extent * 2 + 1200, extent * 2 + 1200), new THREE.MeshLambertMaterial({ map: asphalt.map, color: 0xbfbab2 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = false;
   group.add(ground);
@@ -188,7 +188,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   group.add(marks);
 
   const cobble = cobbleTexture();
-  cobble.repeat.set(0.25, 0.25);
+  cobble.repeat.set(0.5, 0.5);
   const sidewalkGeos: THREE.BufferGeometry[] = [];
   const kerbGeos: THREE.BufferGeometry[] = [];
   const buildings = new Map<string, { facade: Facade; geos: THREE.BufferGeometry[] }>();
@@ -197,6 +197,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   const trimGeos: THREE.BufferGeometry[] = [];
   const darkGeos: THREE.BufferGeometry[] = [];
   const glassGeos: THREE.BufferGeometry[] = [];
+  const shopfronts = new Map<string, { mat: THREE.MeshLambertMaterial; geos: THREE.BufferGeometry[] }>();
   const treeTrunks: THREE.Matrix4[] = [];
   const treeCanopies: THREE.Matrix4[] = [];
   const lampPoleGeos: THREE.BufferGeometry[] = [];
@@ -337,10 +338,13 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
             aw.translate(lot.x + (rng.next() - 0.5) * (w - 6), 3.1, lot.z + side * (d / 2 + 0.7));
             awningGeos.push(aw);
           }
-          // Shop windows: a strip of dark glass.
-          const shop = new THREE.BoxGeometry(w - 2, 2.2, d + 0.15);
-          shop.translate(lot.x, 2.0, lot.z);
-          glassGeos.push(shop);
+          // Shopfront strip: textured bays (windows, doors, fascias) wrapped around the ground floor.
+          const shop = new THREE.BoxGeometry(w - 1.2, 2.6, d + 0.16);
+          facadeUVs(shop, w - 1.2, 2.6, d + 0.16, 16, 2.6);
+          shop.translate(lot.x, 1.9, lot.z);
+          const sfKey = `sf-${rng.int(0, 5)}`;
+          if (!shopfronts.has(sfKey)) shopfronts.set(sfKey, { mat: new THREE.MeshLambertMaterial({ map: shopfrontTexture(seed * 17 + shopfronts.size * 3, SIGN_COLORS[shopfronts.size % SIGN_COLORS.length]), emissive: 0xffd9a0, emissiveIntensity: 0 }), geos: [] });
+          shopfronts.get(sfKey)!.geos.push(shop);
         }
         // Per-floor ledges give the facade real depth; balconies on residential blocks.
         if (district !== 'modern') {
@@ -530,6 +534,23 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
   if (bollards.length) group.add(new THREE.Mesh(mergeSafe(bollards), new THREE.MeshLambertMaterial({ color: 0x2a2a2e})));
   const shopGlassMat = new THREE.MeshLambertMaterial({ color: 0x141a22, emissive: 0xffd9a0, emissiveIntensity: 0});
   if (glassGeos.length) group.add(new THREE.Mesh(mergeSafe(glassGeos), shopGlassMat));
+  for (const sf of shopfronts.values()) if (sf.geos.length) group.add(new THREE.Mesh(mergeSafe(sf.geos), sf.mat));
+  // Drains at every kerb corner and a few manholes mid-road.
+  const drainGeos: THREE.BufferGeometry[] = [];
+  for (const b of blockInfo) {
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const dg = new THREE.BoxGeometry(0.9, 0.03, 0.4);
+      dg.translate(b.cx + sx * (b.half + 0.8), 0.015, b.cz + sz * (b.half - 3));
+      drainGeos.push(dg);
+    }
+  }
+  for (const x of roadsX) for (const z of roadsZ) {
+    if (rng.next() > 0.5) continue;
+    const mh = new THREE.CylinderGeometry(0.5, 0.5, 0.03, 12);
+    mh.translate(x + (rng.next() - 0.5) * 6, 0.015, z + 14 + rng.next() * 30);
+    drainGeos.push(mh);
+  }
+  group.add(new THREE.Mesh(mergeSafe(drainGeos), new THREE.MeshLambertMaterial({ color: 0x2e2c2a })));
 
   // Trees (instanced).
   const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.26, 1, 7), new THREE.MeshLambertMaterial({ color: 0x5a4636}), Math.max(1, treeTrunks.length));
@@ -939,6 +960,7 @@ export function buildWorld(scene: THREE.Scene, seed = 7, quality: 'high' | 'bala
     setNight(n) {
       for (const m of windowMats) m.emissiveIntensity = n * 1.2;
       shopGlassMat.emissiveIntensity = n * 0.6;
+      for (const sf of shopfronts.values()) sf.mat.emissiveIntensity = n * 0.45;
       lampHeadMat.emissiveIntensity = n * 3;
       poolMat.opacity = n * 0.35;
     },

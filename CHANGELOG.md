@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.2 — NEON CITY: shopfronts, road surface, drains
+
+- Textured shopfront strip on every old-town/residential ground floor: 4 m bays with lit windows, shelves of goods, glazed doors, fascia bands and SALE/OPEN decals; they glow at night.
+- Asphalt atlas reworked (lighter grain, cracks, tar patches) and brightened so the road surface reads; cobbles lighter and finer.
+- Kerb drains at block corners and manholes mid-road.
+- Fog picks up a little of the sun colour at golden hour.
+
 ## 1.5.1 — NEON CITY: delivery cash, ground contact, signs and filtering
 
 - Delivery/taxi/race targets sat inside building footprints, so the car could never reach them: targets now sit in the kerb lane, the completion radius is 6.5 m, and a "+$ paid" toast confirms the CASH HUD update.

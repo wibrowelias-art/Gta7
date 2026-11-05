@@ -170,14 +170,14 @@ export function facadeTexture(style: FacadeStyle, seed: number): Facade {
 export function cobbleTexture(seed = 3): THREE.CanvasTexture {
   const rng = new Rng(seed);
   const [c, g] = canvas(512, 512);
-  g.fillStyle = '#8c8578';
+  g.fillStyle = '#a69d8e';
   g.fillRect(0, 0, 512, 512);
   const s = 32;
   for (let y = 0; y < 512; y += s) {
     const off = (y / s) % 2 ? s / 2 : 0;
     for (let x = -s; x < 512; x += s) {
-      const v = 120 + rng.next() * 60;
-      g.fillStyle = `rgb(${v + 10},${v},${v - 12})`;
+      const v = 150 + rng.next() * 55;
+      g.fillStyle = `rgb(${v + 8},${v},${v - 14})`;
       g.fillRect(x + off + 2, y + 2, s - 4, s - 4);
       g.fillStyle = 'rgba(255,255,255,0.12)';
       g.fillRect(x + off + 2, y + 2, s - 4, 3);
@@ -192,12 +192,31 @@ export function cobbleTexture(seed = 3): THREE.CanvasTexture {
 export function asphaltTexture(seed = 5): { map: THREE.CanvasTexture; rough: THREE.CanvasTexture } {
   const rng = new Rng(seed);
   const [c, g] = canvas(512, 512);
-  g.fillStyle = '#3a3733';
+  g.fillStyle = '#56534e';
   g.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 26000; i++) {
-    const v = 40 + rng.next() * 40;
-    g.fillStyle = `rgb(${v},${v - 2},${v - 4})`;
-    g.fillRect(rng.next() * 512, rng.next() * 512, 1.5, 1.5);
+  for (let i = 0; i < 30000; i++) {
+    const v = 60 + rng.next() * 60;
+    g.fillStyle = `rgb(${v},${v - 2},${v - 5})`;
+    g.fillRect(rng.next() * 512, rng.next() * 512, 1.5 + rng.next() * 1.5, 1.5 + rng.next() * 1.5);
+  }
+  // Cracks and tar patches.
+  g.strokeStyle = 'rgba(20,18,16,0.55)';
+  g.lineWidth = 1.5;
+  for (let i = 0; i < 14; i++) {
+    let x = rng.next() * 512;
+    let y = rng.next() * 512;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 8; k++) {
+      x += (rng.next() - 0.5) * 50;
+      y += (rng.next() - 0.5) * 50;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = 'rgba(30,28,26,0.35)';
+    g.fillRect(rng.next() * 512, rng.next() * 512, 30 + rng.next() * 90, 20 + rng.next() * 60);
   }
   for (let i = 0; i < 10; i++) {
     const x = rng.next() * 512;
@@ -411,4 +430,68 @@ export function neonLabelTexture(text: string, color: number, glow = true): THRE
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+/** Ground-floor shopfront strip: 4 m bays with a lit window, shelves inside, a door, a fascia band and an awning stripe. */
+export function shopfrontTexture(seed: number, accent: number): THREE.CanvasTexture {
+  const rng = new Rng(seed);
+  const [c, g] = canvas(512, 128);
+  const hexc = `#${accent.toString(16).padStart(6, '0')}`;
+  g.fillStyle = '#4a4036';
+  g.fillRect(0, 0, 512, 128);
+  for (let bay = 0; bay < 4; bay++) {
+    const x = bay * 128;
+    const kind = rng.next();
+    // Fascia band with the accent colour and a thin gold line.
+    g.fillStyle = hexc;
+    g.fillRect(x, 0, 128, 18);
+    g.fillStyle = 'rgba(255,220,120,0.7)';
+    g.fillRect(x, 18, 128, 2);
+    // Pilasters.
+    g.fillStyle = '#6a5a48';
+    g.fillRect(x, 20, 10, 108);
+    g.fillRect(x + 118, 20, 10, 108);
+    if (kind < 0.3) {
+      // Door bay: glazed door with a brass handle.
+      g.fillStyle = '#2a2420';
+      g.fillRect(x + 10, 20, 108, 108);
+      g.fillStyle = '#1c2a36';
+      g.fillRect(x + 34, 30, 60, 90);
+      g.fillStyle = 'rgba(200,220,255,0.18)';
+      g.fillRect(x + 38, 34, 24, 82);
+      g.fillStyle = '#d9b43a';
+      g.fillRect(x + 84, 76, 4, 12);
+    } else {
+      // Shop window: dark interior with warm shelves and goods, plus a reflection gradient.
+      g.fillStyle = '#1a2028';
+      g.fillRect(x + 10, 20, 108, 108);
+      g.fillStyle = '#3a2a20';
+      g.fillRect(x + 16, 60, 96, 4);
+      g.fillRect(x + 16, 92, 96, 4);
+      for (let i = 0; i < 9; i++) {
+        g.fillStyle = `hsl(${rng.next() * 360},60%,${45 + rng.next() * 25}%)`;
+        g.fillRect(x + 18 + i * 10, 46 + (i % 2) * 32, 7, 12);
+      }
+      const grad = g.createLinearGradient(x + 10, 20, x + 118, 128);
+      grad.addColorStop(0, 'rgba(200,220,255,0.3)');
+      grad.addColorStop(0.5, 'rgba(200,220,255,0.05)');
+      grad.addColorStop(1, 'rgba(255,230,200,0.18)');
+      g.fillStyle = grad;
+      g.fillRect(x + 10, 20, 108, 108);
+      // Window frame.
+      g.strokeStyle = '#2a2420';
+      g.lineWidth = 4;
+      g.strokeRect(x + 12, 22, 104, 104);
+      if (rng.next() > 0.5) {
+        g.fillStyle = 'rgba(255,255,255,0.85)';
+        g.font = '700 18px "Barlow Condensed", "Arial Narrow", sans-serif';
+        g.textAlign = 'center';
+        g.fillText(['SALE', 'OPEN', '24H', 'NEW'][Math.floor(rng.next() * 4)], x + 64, 44);
+      }
+    }
+    // Base plinth.
+    g.fillStyle = '#3a322a';
+    g.fillRect(x, 118, 128, 10);
+  }
+  return finish(c);
 }
